@@ -1,0 +1,9 @@
+{
+  "name": "hisaabdari",
+  "description": "Simple ERP for small and medium businesses, built on the Frappe Framework",
+  "license": "GPL-3.0",
+  "private": true,
+  "dependencies": {
+    "onscan.js": "^1.5.2"
+  }
+}

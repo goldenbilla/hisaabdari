@@ -1,0 +1,156 @@
+.hisaabdari-footer {
+	margin: 11px auto;
+	text-align: center;
+}
+
+.show-all-reports {
+	margin-top: 5px;
+	font-size: 11px;
+}
+
+/* toolbar */
+.toolbar-splash {
+	width: 32px;
+	height: 32px;
+	margin: -10px auto;
+}
+
+.hisaabdari-icon {
+	width: 24px;
+	margin-right: 0px;
+	margin-top: -3px;
+}
+
+.app-icon-svg {
+	display: inline-block;
+	margin: auto;
+	text-align: center;
+	border-radius: 16px;
+	cursor: pointer;
+	box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.app-icon-svg .hub-icon {
+	height: 72px;
+	width: 72px;
+}
+
+.dashboard-list-item {
+	background-color: inherit;
+	border-bottom: 1px solid var(--border-color);
+	font-size: var(--text-md);
+	color: var(--text-color);
+}
+
+#page-stock-balance .dashboard-list-item {
+	padding: 5px 15px;
+}
+
+.dashboard-list-item:last-child {
+	border-bottom: none;
+}
+
+// assessment tool
+.frappe-control[data-fieldname="result_html"] {
+	overflow: scroll;
+}
+.assessment-result-tool {
+	table-layout: fixed;
+
+	input {
+		width: 100%;
+		border: 0;
+		outline: none;
+		text-align: right;
+	}
+
+	th {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.total-score,
+	.grade,
+	.score {
+		text-align: right;
+	}
+}
+
+.price-info {
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	margin: 0 0 15px 15px;
+	background-color: rgba(141, 153, 166, 0.6);
+	padding: 5px 9px;
+	border-radius: 3px;
+	color: #fff;
+}
+
+// Healthcare
+
+.exercise-card {
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+	border-radius: 2px;
+	padding: 6px 6px 6px 8px;
+	margin-top: 10px;
+	height: 100% !important;
+
+	.card-img-top {
+		width: 100%;
+		height: 15vw;
+		object-fit: cover;
+	}
+
+	.btn-edit {
+		position: absolute;
+		bottom: 10px;
+		left: 20px;
+	}
+
+	.btn-del {
+		position: absolute;
+		bottom: 10px;
+		left: 50px;
+	}
+
+	.card-body {
+		margin-bottom: 10px;
+	}
+
+	.card-footer {
+		padding: 10px;
+	}
+}
+
+.exercise-row {
+	height: 100% !important;
+	display: flex;
+	flex-wrap: wrap;
+}
+
+.exercise-col {
+	padding: 10px;
+}
+
+.frappe-control[data-fieldname="other_charges_calculation"] .ql-editor,
+.frappe-control[data-fieldname="address_display"] .ql-editor,
+.frappe-control[data-fieldname="shipping_address_display"] .ql-editor,
+.frappe-control[data-fieldname="shipping_address"] .ql-editor,
+.frappe-control[data-fieldname="dispatch_address_display"] .ql-editor,
+.frappe-control[data-fieldname="dispatch_address"] .ql-editor,
+.frappe-control[data-fieldname="source_address_display"] .ql-editor,
+.frappe-control[data-fieldname="target_address_display"] .ql-editor,
+.frappe-control[data-fieldname="billing_address_display"] .ql-editor,
+.frappe-control[data-fieldname="company_address_display"] .ql-editor {
+	white-space: normal;
+}
+
+.btn-clear-last-scanned-warehouse {
+	position: absolute;
+	right: 8px;
+	top: 50%;
+	transform: translateY(-50%);
+	z-index: 1;
+}

@@ -1,0 +1,82 @@
+# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
+# License: GNU General Public License v3. See license.txt
+
+
+from frappe.model.document import Document
+
+
+class DeliveryNoteItem(Document):
+	# begin: auto-generated types
+	# This code is auto-generated. Do not modify anything in this block.
+
+	from typing import TYPE_CHECKING
+
+	if TYPE_CHECKING:
+		from frappe.types import DF
+
+		actual_batch_qty: DF.Float
+		actual_qty: DF.Float
+		against_sales_invoice: DF.Link | None
+		against_sales_order: DF.Link | None
+		allow_zero_valuation_rate: DF.Check
+		amount: DF.Currency
+		barcode: DF.Data | None
+		base_amount: DF.Currency
+		base_net_amount: DF.Currency
+		base_net_rate: DF.Currency
+		base_price_list_rate: DF.Currency
+		base_rate: DF.Currency
+		base_rate_with_margin: DF.Currency
+		batch_no: DF.Link | None
+		billed_amt: DF.Currency
+		company_total_stock: DF.Float
+		conversion_factor: DF.Float
+		cost_center: DF.Link | None
+		customer_item_code: DF.Data | None
+		description: DF.TextEditor | None
+		discount_amount: DF.Currency
+		discount_percentage: DF.Float
+		distributed_discount_amount: DF.Currency
+		dn_detail: DF.Data | None
+		expense_account: DF.Link | None
+		has_item_scanned: DF.Check
+		image: DF.Attach | None
+		incoming_rate: DF.Currency
+		item_code: DF.Link
+		item_group: DF.Link | None
+		item_name: DF.Data
+		item_tax_rate: DF.SmallText | None
+		mapped_additional_discount_amount: DF.Currency
+		margin_rate_or_amount: DF.Float
+		margin_type: DF.Literal["", "Percentage", "Amount"]
+		net_amount: DF.Currency
+		net_rate: DF.Currency
+		page_break: DF.Check
+		parent: DF.Data
+		parentfield: DF.Data
+		parenttype: DF.Data
+		price_list_rate: DF.Currency
+		purchase_order: DF.Link | None
+		purchase_order_item: DF.Data | None
+		qty: DF.Float
+		rate: DF.Currency
+		rate_with_margin: DF.Currency
+		received_qty: DF.Float
+		returned_qty: DF.Float
+		serial_and_batch_bundle: DF.Link | None
+		serial_no: DF.Text | None
+		si_detail: DF.Data | None
+		so_detail: DF.Data | None
+		stock_qty: DF.Float
+		stock_uom: DF.Link
+		stock_uom_rate: DF.Currency
+		target_warehouse: DF.Link | None
+		total_weight: DF.Float
+		uom: DF.Link
+		use_serial_batch_fields: DF.Check
+		warehouse: DF.Link | None
+		weight_per_unit: DF.Float
+		weight_uom: DF.Link | None
+	# end: auto-generated types
+
+	pass

@@ -1,0 +1,44 @@
+{
+ "actions": [],
+ "creation": "2013-02-22 01:28:01",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "valid_from",
+  "minimum_net_rate",
+  "maximum_net_rate"
+ ],
+ "fields": [
+  {
+   "fieldname": "valid_from",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Valid From"
+  },
+  {
+   "fieldname": "maximum_net_rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Maximum Net Rate"
+  },
+  {
+   "fieldname": "minimum_net_rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Minimum Net Rate"
+  }
+ ],
+ "idx": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2024-03-27 13:09:55.445934",
+ "modified_by": "Administrator",
+ "module": "Stock",
+ "name": "Item Tax",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

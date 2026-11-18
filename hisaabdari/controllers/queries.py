@@ -1,0 +1,935 @@
+# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
+# License: GNU General Public License v3. See license.txt
+
+
+import json
+from collections import OrderedDict, defaultdict
+
+import frappe
+from frappe import _, qb
+from frappe.desk.reportview import get_filters_cond, get_match_cond
+from frappe.query_builder import Case, Criterion, DocType
+from frappe.query_builder.functions import Concat, Locate, Lower, Sum
+from frappe.query_builder.terms import NamedParameterWrapper
+from frappe.utils import cint, nowdate, today, unique
+from pypika import Order
+
+import hisaabdari
+from hisaabdari.stock.doctype.company_restriction.company_restriction import get_restriction_criterion
+from hisaabdari.stock.doctype.item.item_search import get_item_search_candidates
+from hisaabdari.stock.utils import get_combine_datetime
+
+
+def has_ignored_field(reference_doctype, doctype):
+	meta = frappe.get_meta(reference_doctype)
+	for field in meta.fields:
+		if not field.ignore_user_permissions:
+			continue
+		if field.fieldtype == "Link" and field.options == doctype:
+			return True
+		elif field.fieldtype == "Dynamic Link":
+			options = meta.get_link_doctype(field.fieldname)
+			if not options:
+				continue
+			if isinstance(options, str):
+				options = options.split("\n")
+			if doctype in options or "DocType" in options:
+				return True
+
+	return False
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def tax_account_query(doctype, txt, searchfield, start, page_len, filters):
+	doctype = "Account"
+	company_currency = hisaabdari.get_company_currency(filters.get("company"))
+
+	def get_accounts(with_account_type_filter):
+		account_type_condition = ""
+		if with_account_type_filter:
+			account_type_condition = "AND account_type in %(account_types)s"
+
+		accounts = frappe.db.sql(
+			f"""
+			SELECT name, parent_account
+			FROM `tabAccount`
+			WHERE `tabAccount`.docstatus!=2
+				{account_type_condition}
+				AND is_group = 0
+				AND company = %(company)s
+				AND disabled = %(disabled)s
+				AND (account_currency = %(currency)s or ifnull(account_currency, '') = '')
+				AND `{searchfield}` LIKE %(txt)s
+				{get_match_cond(doctype)}
+			ORDER BY idx DESC, name
+			LIMIT %(limit)s offset %(offset)s
+		""",
+			dict(
+				account_types=filters.get("account_type"),
+				company=filters.get("company"),
+				disabled=filters.get("disabled", 0),
+				currency=company_currency,
+				txt=f"%{txt}%",
+				offset=start,
+				limit=page_len,
+			),
+		)
+
+		return accounts
+
+	tax_accounts = get_accounts(True)
+
+	if not tax_accounts:
+		tax_accounts = get_accounts(False)
+
+	return tax_accounts
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def party_query(
+	doctype: str,
+	txt: str,
+	searchfield: str,
+	start: int,
+	page_len: int,
+	filters: dict | str | None = None,
+):
+	party_name_field = {"Customer": "customer_name", "Supplier": "supplier_name"}.get(doctype)
+	if not party_name_field:
+		frappe.throw(_("Invalid party type: {0}").format(doctype))
+
+	filters = frappe.parse_json(filters) if filters else {}
+	if not isinstance(filters, dict):
+		frappe.throw(_("Party query filters must be a dictionary"))
+
+	company = filters.pop("company", None)
+	fields = get_fields(doctype, ["name", party_name_field])
+	party = DocType(doctype)
+	search_str = f"%{txt}%"
+	txt_no_percent = txt.replace("%", "")
+	search_fields = list(dict.fromkeys([searchfield, *fields]))
+	search_conditions = [party[field].like(search_str) for field in search_fields]
+
+	query = (
+		frappe.qb.get_query(doctype, fields=fields, filters=filters, ignore_permissions=False)
+		.where(party.docstatus < 2)
+		.where(Criterion.any(search_conditions))
+		.orderby(
+			Case()
+			.when(
+				Locate(Lower(txt_no_percent), Lower(party.name)) > 0,
+				Locate(Lower(txt_no_percent), Lower(party.name)),
+			)
+			.else_(99999)
+		)
+		.orderby(
+			Case()
+			.when(
+				Locate(Lower(txt_no_percent), Lower(party[party_name_field])) > 0,
+				Locate(Lower(txt_no_percent), Lower(party[party_name_field])),
+			)
+			.else_(99999)
+		)
+		.orderby(party.idx, order=Order.desc)
+		.orderby(party.name)
+		.orderby(party[party_name_field])
+		.limit(page_len)
+		.offset(start)
+	)
+
+	if company:
+		query = query.where(get_restriction_criterion(doctype, [company]))
+
+	return query.run()
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def item_query(
+	doctype: str,
+	txt: str,
+	searchfield: str,
+	start: int,
+	page_len: int,
+	filters: dict | list | str | None,
+	as_dict: bool = False,
+):
+	doctype = "Item"
+	conditions = []
+
+	if isinstance(filters, str):
+		filters = json.loads(filters)
+
+	company = filters.pop("company", None) if isinstance(filters, dict) else None
+
+	# Get searchfields from meta and use in Item Link field query
+	meta = frappe.get_meta(doctype, cached=True)
+	searchfields = meta.get_search_fields()
+
+	columns = ""
+	extra_searchfields = [field for field in searchfields if field not in ["name", "description"]]
+
+	if extra_searchfields:
+		columns += ", " + ", ".join(extra_searchfields)
+
+	if "description" in searchfields:
+		columns += """, if(length(tabItem.description) > 40, \
+			concat(substr(tabItem.description, 1, 40), "..."), description) as description"""
+
+	searchfields = searchfields + [
+		field
+		for field in [
+			searchfield or "name",
+			"item_code",
+			"item_group",
+			"item_name",
+		]
+		if field not in searchfields
+	]
+	searched_fields = list(searchfields)
+	searchfields = " or ".join([field + " like %(txt)s" for field in searchfields])
+
+	if filters and isinstance(filters, dict):
+		filters.pop("customer", None)
+		filters.pop("supplier", None)
+
+	company_cond = ""
+	company_params = NamedParameterWrapper()
+	if company:
+		company_cond = "and " + get_restriction_criterion("Item", [company]).get_sql(
+			with_namespace=True, quote_char="`", param_wrapper=company_params, subquery=True
+		)
+
+	description_cond = ""
+	if frappe.db.estimate_count(doctype) < 50000:
+		# scan description only if items are less than 50000
+		description_cond = "or tabItem.description LIKE %(txt)s"
+		searched_fields.append("description")
+
+	candidate_cond = ""
+	candidates = get_item_search_candidates(txt, searched_fields)
+	if candidates is not None:
+		if not candidates:
+			return [] if as_dict else ()
+
+		candidate_cond = "and tabItem.name in %(candidates)s"
+
+	# nosemgrep: frappe-semgrep-rules.rules.security.frappe-sql-format-injection
+	return frappe.db.sql(
+		"""select
+			tabItem.name {columns}
+		from tabItem
+		where tabItem.docstatus < 2
+			and tabItem.disabled=0
+			and (tabItem.end_of_life > %(today)s or ifnull(tabItem.end_of_life, '0000-00-00')='0000-00-00')
+			and ({scond} or tabItem.item_code IN (select parent from `tabItem Barcode` where barcode LIKE %(txt)s)
+				{description_cond})
+			{fcond} {mcond} {candidate_cond} {company_cond}
+		order by
+			if(locate(%(_txt)s, name), locate(%(_txt)s, name), 99999),
+			if(locate(%(_txt)s, item_name), locate(%(_txt)s, item_name), 99999),
+			idx desc,
+			name, item_name
+		limit %(start)s, %(page_len)s """.format(
+			columns=columns,
+			scond=searchfields,
+			fcond=get_filters_cond(doctype, filters, conditions).replace("%", "%%"),
+			mcond=get_match_cond(doctype),
+			description_cond=description_cond,
+			candidate_cond=candidate_cond,
+			company_cond=company_cond,
+		),
+		{
+			"today": nowdate(),
+			"txt": "%%%s%%" % txt,
+			"_txt": txt.replace("%", ""),
+			"start": start,
+			"page_len": page_len,
+			"candidates": tuple(candidates or ()),
+			**company_params.get_parameters(),
+		},
+		as_dict=as_dict,
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_delivery_notes_to_be_billed(
+	doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict, as_dict: bool = False
+):
+	DeliveryNote = frappe.qb.DocType("Delivery Note")
+
+	fields = get_fields(doctype, ["name", "customer", "posting_date"])
+
+	original_dn = (
+		frappe.qb.from_(DeliveryNote)
+		.select(DeliveryNote.name)
+		.where((DeliveryNote.docstatus == 1) & (DeliveryNote.is_return == 0) & (DeliveryNote.per_billed > 0))
+	)
+
+	query = frappe.qb.get_query(
+		"Delivery Note",
+		fields=fields,
+		filters=filters,
+		ignore_permissions=False,
+	)
+
+	query = (
+		query.where(
+			(DeliveryNote.docstatus == 1)
+			& (DeliveryNote.status.notin(["Stopped", "Closed", "Return Issued"]))
+			& (DeliveryNote[searchfield].like(f"%{txt}%"))
+			& (
+				((DeliveryNote.is_return == 0) & (DeliveryNote.per_billed < 100))
+				| ((DeliveryNote.grand_total == 0) & (DeliveryNote.per_billed < 100))
+				| (
+					(DeliveryNote.is_return == 1)
+					& (DeliveryNote.per_billed < 100)
+					& (DeliveryNote.return_against.isin(original_dn))
+				)
+			)
+		)
+		.orderby(DeliveryNote[searchfield], order=Order.asc)
+		.limit(page_len)
+		.offset(start)
+	)
+
+	return query.run(as_dict=as_dict)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_batch_no(doctype, txt, searchfield, start, page_len, filters):
+	doctype = "Batch"
+	meta = frappe.get_meta(doctype, cached=True)
+	searchfields = meta.get_search_fields()
+	page_len = 300
+
+	batches = get_batches_from_stock_ledger_entries(searchfields, txt, filters, start, page_len)
+	batches.extend(get_batches_from_serial_and_batch_bundle(searchfields, txt, filters, start, page_len))
+
+	filtered_batches = get_filterd_batches(batches)
+
+	if filters.get("is_inward"):
+		filtered_batches.extend(get_empty_batches(filters, start, page_len, filtered_batches, txt))
+
+	return filtered_batches
+
+
+def get_empty_batches(filters, start, page_len, filtered_batches=None, txt=None):
+	query_filter = {"item": filters.get("item_code"), "disabled": 0}
+	if txt:
+		query_filter["name"] = ("like", f"%{txt}%")
+
+	exclude_batches = [batch[0] for batch in filtered_batches] if filtered_batches else []
+	if exclude_batches:
+		query_filter["name"] = ("not in", exclude_batches)
+
+	return frappe.get_all(
+		"Batch",
+		fields=["name", "batch_qty"],
+		filters=query_filter,
+		limit_start=start,
+		limit_page_length=page_len,
+		as_list=1,
+	)
+
+
+def get_filterd_batches(data):
+	batches = OrderedDict()
+
+	for batch_data in data:
+		if batch_data[0] not in batches:
+			batches[batch_data[0]] = list(batch_data)
+		else:
+			batches[batch_data[0]][1] += batch_data[1]
+
+	filterd_batch = []
+	for _batch, batch_data in batches.items():
+		if batch_data[1] > 0:
+			filterd_batch.append(tuple(batch_data))
+
+	return filterd_batch
+
+
+def get_batches_from_stock_ledger_entries(searchfields, txt, filters, start=0, page_len=100):
+	stock_ledger_entry = frappe.qb.DocType("Stock Ledger Entry")
+	batch_table = frappe.qb.DocType("Batch")
+
+	expiry_date = filters.get("posting_date") or today()
+
+	query = (
+		frappe.qb.from_(stock_ledger_entry)
+		.inner_join(batch_table)
+		.on(batch_table.name == stock_ledger_entry.batch_no)
+		.select(
+			stock_ledger_entry.batch_no,
+			Sum(stock_ledger_entry.actual_qty).as_("qty"),
+		)
+		.where(stock_ledger_entry.is_cancelled == 0)
+		.where(
+			(stock_ledger_entry.item_code == filters.get("item_code"))
+			& (batch_table.disabled == 0)
+			& (stock_ledger_entry.batch_no.isnotnull())
+		)
+		.groupby(stock_ledger_entry.batch_no, stock_ledger_entry.warehouse)
+		.having(Sum(stock_ledger_entry.actual_qty) != 0)
+		.offset(start)
+		.limit(page_len)
+	)
+
+	if not filters.get("is_inward"):
+		if filters.get("posting_date") and filters.get("posting_time"):
+			query = query.where(
+				stock_ledger_entry.posting_datetime
+				<= get_combine_datetime(filters.get("posting_date"), filters.get("posting_time"))
+			)
+
+	if not filters.get("include_expired_batches"):
+		query = query.where((batch_table.expiry_date >= expiry_date) | (batch_table.expiry_date.isnull()))
+
+	query = query.select(
+		Concat("MFG-", batch_table.manufacturing_date).as_("manufacturing_date"),
+		Concat("EXP-", batch_table.expiry_date).as_("expiry_date"),
+	)
+
+	if filters.get("warehouse"):
+		query = query.where(stock_ledger_entry.warehouse == filters.get("warehouse"))
+
+	for field in searchfields:
+		query = query.select(batch_table[field])
+
+	if txt:
+		txt_condition = batch_table.name.like(f"%{txt}%")
+		for field in [*searchfields, "name"]:
+			txt_condition |= batch_table[field].like(f"%{txt}%")
+
+		query = query.where(txt_condition)
+
+	return query.run(as_list=1) or []
+
+
+def get_batches_from_serial_and_batch_bundle(searchfields, txt, filters, start=0, page_len=100):
+	bundle = frappe.qb.DocType("Serial and Batch Entry")
+	stock_ledger_entry = frappe.qb.DocType("Stock Ledger Entry")
+	batch_table = frappe.qb.DocType("Batch")
+
+	expiry_date = filters.get("posting_date") or today()
+
+	bundle_query = (
+		frappe.qb.from_(bundle)
+		.inner_join(stock_ledger_entry)
+		.on(bundle.parent == stock_ledger_entry.serial_and_batch_bundle)
+		.inner_join(batch_table)
+		.on(batch_table.name == bundle.batch_no)
+		.select(
+			bundle.batch_no,
+			Sum(bundle.qty).as_("qty"),
+		)
+		.where(stock_ledger_entry.is_cancelled == 0)
+		.where(
+			(stock_ledger_entry.item_code == filters.get("item_code"))
+			& (batch_table.disabled == 0)
+			& (stock_ledger_entry.serial_and_batch_bundle.isnotnull())
+		)
+		.groupby(bundle.batch_no, bundle.warehouse)
+		.having(Sum(bundle.qty) != 0)
+		.offset(start)
+		.limit(page_len)
+	)
+
+	if not filters.get("is_inward"):
+		if filters.get("posting_date") and filters.get("posting_time"):
+			bundle_query = bundle_query.where(
+				stock_ledger_entry.posting_datetime
+				<= get_combine_datetime(filters.get("posting_date"), filters.get("posting_time"))
+			)
+
+	if not filters.get("include_expired_batches"):
+		bundle_query = bundle_query.where(
+			(batch_table.expiry_date >= expiry_date) | (batch_table.expiry_date.isnull())
+		)
+
+	bundle_query = bundle_query.select(
+		Concat("MFG-", batch_table.manufacturing_date),
+		Concat("EXP-", batch_table.expiry_date),
+	)
+
+	if filters.get("warehouse"):
+		bundle_query = bundle_query.where(stock_ledger_entry.warehouse == filters.get("warehouse"))
+
+	for field in searchfields:
+		bundle_query = bundle_query.select(batch_table[field])
+
+	if txt:
+		txt_condition = batch_table.name.like(f"%{txt}%")
+		for field in [*searchfields, "name"]:
+			txt_condition |= batch_table[field].like(f"%{txt}%")
+
+		bundle_query = bundle_query.where(txt_condition)
+
+	return bundle_query.run(as_list=1)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_account_list(doctype, txt, searchfield, start, page_len, filters):
+	doctype = "Account"
+	filter_list = []
+
+	if isinstance(filters, dict):
+		for key, val in filters.items():
+			if isinstance(val, list | tuple):
+				filter_list.append([doctype, key, val[0], val[1]])
+			else:
+				filter_list.append([doctype, key, "=", val])
+	elif isinstance(filters, list):
+		filter_list.extend(filters)
+
+	if "is_group" not in [d[1] for d in filter_list]:
+		filter_list.append(["Account", "is_group", "=", "0"])
+
+	if searchfield and txt:
+		filter_list.append([doctype, searchfield, "like", "%%%s%%" % txt])
+
+	return frappe.desk.reportview.execute(
+		doctype,
+		filters=filter_list,
+		fields=["name", "parent_account"],
+		limit_start=start,
+		limit_page_length=page_len,
+		as_list=True,
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_income_account(doctype, txt, searchfield, start, page_len, filters):
+	# income account can be any Credit account,
+	# but can also be a Asset account with account_type='Income Account' in special circumstances.
+	# Hence the first condition is an "OR"
+
+	if not filters:
+		filters = {}
+
+	dt = "Account"
+
+	acc = qb.DocType(dt)
+	condition = [
+		(acc.report_type.eq("Profit and Loss") | acc.account_type.isin(["Income Account", "Temporary"])),
+		acc.is_group.eq(0),
+		acc.disabled.eq(0),
+	]
+	if txt:
+		condition.append(acc.name.like(f"%{txt}%"))
+
+	if filters.get("company"):
+		condition.append(acc.company.eq(filters.get("company")))
+
+	return (
+		frappe.qb.get_query(dt, fields=["name"], ignore_permissions=False)
+		.where(Criterion.all(condition))
+		.orderby(acc.idx, order=Order.desc)
+		.orderby(acc.name)
+		.run()
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_filtered_dimensions(doctype, txt, searchfield, start, page_len, filters, reference_doctype=None):
+	from hisaabdari.accounts.doctype.accounting_dimension_filter.accounting_dimension_filter import (
+		get_dimension_filter_map,
+	)
+
+	dimension_filters = get_dimension_filter_map()
+	dimension_filters = dimension_filters.get((filters.get("dimension"), filters.get("account")))
+	query_filters = []
+	or_filters = []
+	fields = ["name"]
+
+	searchfields = frappe.get_meta(doctype).get_search_fields()
+
+	meta = frappe.get_meta(doctype)
+	if meta.is_tree and meta.has_field("is_group"):
+		query_filters.append(["is_group", "=", 0])
+
+	if meta.has_field("disabled"):
+		query_filters.append(["disabled", "!=", 1])
+
+	if meta.has_field("company"):
+		query_filters.append(["company", "=", filters.get("company")])
+
+	for field in searchfields:
+		or_filters.append([field, "LIKE", "%%%s%%" % txt])
+		fields.append(field)
+
+	if dimension_filters:
+		if dimension_filters["allow_or_restrict"] == "Allow":
+			query_selector = "in"
+		else:
+			query_selector = "not in"
+
+		if len(dimension_filters["allowed_dimensions"]) == 1:
+			dimensions = tuple(dimension_filters["allowed_dimensions"] * 2)
+		else:
+			dimensions = tuple(dimension_filters["allowed_dimensions"])
+
+		query_filters.append(["name", query_selector, dimensions])
+
+	output = frappe.get_list(
+		doctype,
+		fields=fields,
+		filters=query_filters,
+		or_filters=or_filters,
+		as_list=1,
+		reference_doctype=reference_doctype,
+	)
+
+	return [tuple(d) for d in set(output)]
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_expense_account(doctype, txt, searchfield, start, page_len, filters):
+	if not filters:
+		filters = {}
+
+	dt = "Account"
+
+	acc = qb.DocType(dt)
+	condition = [
+		(
+			acc.report_type.eq("Profit and Loss")
+			| acc.account_type.isin(
+				[
+					"Expense Account",
+					"Fixed Asset",
+					"Temporary",
+					"Asset Received But Not Billed",
+					"Capital Work in Progress",
+				]
+			)
+		),
+		acc.is_group.eq(0),
+		acc.disabled.eq(0),
+	]
+	if txt:
+		condition.append(acc.name.like(f"%{txt}%"))
+
+	if filters.get("company"):
+		condition.append(acc.company.eq(filters.get("company")))
+
+	return (
+		frappe.qb.get_query(dt, fields=["name"], ignore_permissions=False)
+		.where(Criterion.all(condition))
+		.run()
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def warehouse_query(doctype, txt, searchfield, start, page_len, filters):
+	# Should be used when item code is passed in filters.
+	doctype = "Warehouse"
+	conditions, bin_conditions = [], []
+	filter_dict = get_doctype_wise_filters(filters)
+
+	warehouse_field = "name"
+	meta = frappe.get_meta("Warehouse")
+	if meta.get("show_title_field_in_link") and meta.get("title_field"):
+		searchfield = meta.get("title_field")
+		warehouse_field = meta.get("title_field")
+
+	stock_column, bin_join, stock_order = "", "", ""
+	if frappe.has_permission("Bin", "read"):
+		stock_column = (
+			", CONCAT_WS(' : ', 'Actual Qty', ifnull(round(`tabBin`.actual_qty, 2), 0 )) actual_qty"
+		)
+		bin_join = "left join `tabBin` on `tabBin`.warehouse = `tabWarehouse`.name " + get_filters_cond(
+			doctype, filter_dict.get("Bin"), bin_conditions, ignore_permissions=True
+		)
+		stock_order = "ifnull(`tabBin`.actual_qty, 0) desc,"
+
+	query = """select `tabWarehouse`.`{warehouse_field}` {stock_column}
+		from `tabWarehouse` {bin_join}
+		where
+			`tabWarehouse`.`{key}` like {txt}
+			{fcond} {mcond}
+		order by {stock_order} `tabWarehouse`.`{warehouse_field}` asc
+		limit
+			{page_len} offset {start}
+		""".format(
+		warehouse_field=warehouse_field,
+		stock_column=stock_column,
+		bin_join=bin_join,
+		stock_order=stock_order,
+		key=searchfield,
+		fcond=get_filters_cond(doctype, filter_dict.get("Warehouse"), conditions),
+		mcond=get_match_cond(doctype),
+		start=start,
+		page_len=page_len,
+		txt=frappe.db.escape(f"%{txt}%"),
+	)
+
+	return frappe.db.sql(query)
+
+
+def get_doctype_wise_filters(filters):
+	# Helper function to seperate filters doctype_wise
+	filter_dict = defaultdict(list)
+	for row in filters:
+		filter_dict[row[0]].append(row)
+	return filter_dict
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_batch_numbers(doctype, txt, searchfield, start, page_len, filters):
+	# get_list applies the select check and the caller's record-level conditions together
+	batch_filters = [["disabled", "=", 0], ["name", "like", f"%{txt}%"]]
+
+	if filters and filters.get("item"):
+		batch_filters.append(["item", "=", filters.get("item")])
+
+	return frappe.get_list(
+		"Batch",
+		filters=batch_filters,
+		or_filters=[["expiry_date", "is", "not set"], ["expiry_date", ">=", today()]],
+		fields=["batch_id"],
+		order_by="batch_id",
+		limit_start=start,
+		limit_page_length=page_len,
+		as_list=True,
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_purchase_receipts(doctype, txt, searchfield, start, page_len, filters):
+	pr_filters = [["docstatus", "=", 1], ["name", "like", f"%{txt}%"]]
+
+	if filters and filters.get("item_code"):
+		if frappe.has_permission("Purchase Receipt", "read"):
+			# one indexed join, deduped by group_by below
+			pr_filters.append(["Purchase Receipt Item", "item_code", "=", filters.get("item_code")])
+		else:
+			# a select-only caller may use this picker but may not filter on a child table, so resolve the
+			# parents separately rather than losing the filter to a PermissionError.
+			parents = frappe.get_all(
+				"Purchase Receipt Item",
+				filters={"item_code": filters.get("item_code"), "parenttype": "Purchase Receipt"},
+				pluck="parent",
+				distinct=True,
+			)
+			pr_filters.append(["name", "in", parents or [""]])
+
+	# group_by, not distinct: frappe drops ORDER BY from a distinct query on Postgres.
+	return frappe.get_list(
+		"Purchase Receipt",
+		filters=pr_filters,
+		fields=["name"],
+		group_by="name",
+		order_by="name",
+		limit_start=start,
+		limit_page_length=page_len,
+		as_list=True,
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_purchase_invoices(doctype, txt, searchfield, start, page_len, filters):
+	pi_filters = [["docstatus", "=", 1], ["name", "like", f"%{txt}%"]]
+
+	if filters and filters.get("item_code"):
+		if frappe.has_permission("Purchase Invoice", "read"):
+			# one indexed join, deduped by group_by below
+			pi_filters.append(["Purchase Invoice Item", "item_code", "=", filters.get("item_code")])
+		else:
+			# a select-only caller may use this picker but may not filter on a child table, so resolve the
+			# parents separately rather than losing the filter to a PermissionError.
+			parents = frappe.get_all(
+				"Purchase Invoice Item",
+				filters={"item_code": filters.get("item_code"), "parenttype": "Purchase Invoice"},
+				pluck="parent",
+				distinct=True,
+			)
+			pi_filters.append(["name", "in", parents or [""]])
+
+	# group_by, not distinct: frappe drops ORDER BY from a distinct query on Postgres.
+	return frappe.get_list(
+		"Purchase Invoice",
+		filters=pi_filters,
+		fields=["name"],
+		group_by="name",
+		order_by="name",
+		limit_start=start,
+		limit_page_length=page_len,
+		as_list=True,
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_doctypes_for_closing(doctype, txt, searchfield, start, page_len, filters):
+	doctypes = frappe.get_hooks("period_closing_doctypes")
+	if txt:
+		doctypes = [d for d in doctypes if txt.lower() in d.lower()]
+	return [(d,) for d in set(doctypes)]
+
+
+def get_fields(doctype, fields=None):
+	if fields is None:
+		fields = []
+	meta = frappe.get_meta(doctype)
+	fields.extend(meta.get_search_fields())
+
+	if meta.title_field and meta.title_field.strip() not in fields:
+		fields.insert(1, meta.title_field.strip())
+
+	return unique(fields)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_payment_terms_for_references(doctype, txt, searchfield, start, page_len, filters) -> list:
+	terms = []
+	if filters:
+		reference = filters.get("reference")
+		if not reference:
+			return terms
+
+		# only a plain name names one document: a filter operator would widen this past the document the
+		# caller named, and past the one being authorised below.
+		if not isinstance(reference, str):
+			frappe.throw(_("Invalid reference"), frappe.PermissionError)
+
+		# Payment Schedule is a child table with no permissions of its own, so its parent decides access.
+		# Prefer the caller's own reference type: the lookup cannot tell two same-named parents apart.
+		parenttype = filters.get("reference_doctype") or frappe.db.get_value(
+			"Payment Schedule", {"parent": reference}, "parenttype"
+		)
+		if not parenttype:
+			return terms
+
+		frappe.has_permission(parenttype, doc=reference, throw=True)
+
+		terms = frappe.db.get_all(
+			"Payment Schedule",
+			filters={"parent": reference, "parenttype": parenttype},
+			fields=["payment_term"],
+			limit=page_len,
+			as_list=1,
+		)
+	return terms
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_filtered_child_rows(doctype, txt, searchfield, start, page_len, filters) -> list:
+	parent = filters.get("parent") if filters else None
+
+	# a plain name, never a filter operator: ["like", "%"] would span parents, only one of which is
+	# the document authorised below.
+	if not parent or not isinstance(parent, str):
+		frappe.throw(_("Parent document is required to search child rows"), frappe.PermissionError)
+
+	# `doctype` is caller supplied, so it has to be a child table: any other would put the caller's
+	# filters on a table this query never meant to read.
+	if not frappe.get_meta(doctype).istable:
+		frappe.throw(_("{0} is not a child table").format(doctype), frappe.PermissionError)
+
+	# child tables carry no permissions of their own, so the parent decides access. Read the parent
+	# type off the rows, not off `filters`, so the document authorised is the one returned.
+	parenttype = frappe.db.get_value(doctype, {"parent": parent}, "parenttype")
+
+	if not parenttype or not frappe.db.exists(parenttype, parent):
+		return []
+
+	frappe.has_permission(doctype, parent_doctype=parenttype, throw=True)
+
+	# and on the parent record itself, so that User Permissions still apply
+	frappe.has_permission(parenttype, doc=parent, throw=True)
+
+	table = frappe.qb.DocType(doctype)
+	query = (
+		frappe.get_query(table, filters=filters, ignore_permissions=False, parent_doctype=parenttype)
+		.select(
+			Concat("#", table.idx, ", ", table.item_code),
+		)
+		.orderby(table.idx)
+		.offset(start)
+		.limit(page_len)
+	)
+
+	if txt:
+		txt += "%"
+		query = query.where(
+			((table.idx.like(txt.replace("#", ""))) | (table.item_code.like(txt))) | (table.name.like(txt))
+		)
+
+	return query.run(as_dict=False)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_item_uom_query(doctype, txt, searchfield, start, page_len, filters):
+	if frappe.get_single_value("Stock Settings", "allow_uom_with_conversion_rate_defined_in_item"):
+		item_code = filters.get("item_code")
+		if not item_code or not frappe.get_list("Item", filters=[["name", "=", item_code]], pluck="name"):
+			return []
+
+		query_filters = {"parent": item_code, "parenttype": "Item"}
+
+		if txt:
+			query_filters["uom"] = ["like", f"%{txt}%"]
+
+		return frappe.get_all(
+			"UOM Conversion Detail",
+			filters=query_filters,
+			fields=["uom", "conversion_factor"],
+			limit_start=start,
+			limit_page_length=page_len,
+			order_by="idx",
+			as_list=1,
+		)
+
+	return frappe.get_list(
+		"UOM",
+		filters={"name": ["like", f"%{txt}%"], "enabled": 1},
+		fields=["name"],
+		limit_start=start,
+		limit_page_length=page_len,
+		as_list=1,
+	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_warehouse_address(doctype: str, txt: str, searchfield: str, start: int, page_len: int, filters: dict):
+	warehouse = filters.get("warehouse")
+	if not warehouse or not isinstance(warehouse, str):
+		return []
+
+	frappe.has_permission("Warehouse", "read", warehouse, throw=True)
+	table = frappe.qb.DocType(doctype)
+	child_table = frappe.qb.DocType("Dynamic Link")
+
+	query = (
+		frappe.qb.from_(table)
+		.inner_join(child_table)
+		.on((table.name == child_table.parent) & (child_table.parenttype == doctype))
+		.select(table.name)
+		.where(
+			(child_table.link_name == warehouse)
+			& (table.disabled == 0)
+			& (child_table.link_doctype == "Warehouse")
+			& (table.name.like(f"%{txt}%"))
+		)
+		.offset(start)
+		.limit(page_len)
+	)
+	return query.run(as_list=1)

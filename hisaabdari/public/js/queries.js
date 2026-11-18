@@ -1,0 +1,220 @@
+// Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
+// License: GNU General Public License v3. See license.txt
+
+// searches for enabled users
+frappe.provide("hisaabdari.queries");
+$.extend(hisaabdari.queries, {
+	user: function () {
+		return { query: "frappe.core.doctype.user.user.user_query" };
+	},
+
+	party: function (doc) {
+		return {
+			query: "hisaabdari.controllers.queries.party_query",
+			filters: { disabled: 0, company: doc.company },
+		};
+	},
+
+	customer: function (doc) {
+		return hisaabdari.queries.party(doc);
+	},
+
+	supplier: function (doc) {
+		return hisaabdari.queries.party(doc);
+	},
+
+	item: function (filters) {
+		var args = { query: "hisaabdari.controllers.queries.item_query" };
+		if (filters) args["filters"] = filters;
+		return args;
+	},
+
+	customer_filter: function (doc) {
+		if (!doc.customer) {
+			cur_frm.scroll_to_field("customer");
+			frappe.show_alert({
+				message: __("Please set {0} first.", [
+					__(frappe.meta.get_label(doc.doctype, "customer", doc.name)),
+				]),
+				indicator: "orange",
+			});
+		}
+
+		return { filters: { customer: doc.customer } };
+	},
+
+	contact_query: function (doc) {
+		if (frappe.dynamic_link) {
+			if (!doc[frappe.dynamic_link.fieldname]) {
+				cur_frm.scroll_to_field(frappe.dynamic_link.fieldname);
+				frappe.show_alert({
+					message: __("Please set {0} first.", [
+						__(frappe.meta.get_label(doc.doctype, frappe.dynamic_link.fieldname, doc.name)),
+					]),
+					indicator: "orange",
+				});
+			}
+
+			return {
+				query: "frappe.contacts.doctype.contact.contact.contact_query",
+				filters: {
+					link_doctype: frappe.dynamic_link.doctype,
+					link_name: doc[frappe.dynamic_link.fieldname],
+				},
+			};
+		}
+	},
+
+	company_contact_query: function (doc) {
+		if (!doc.company) {
+			frappe.throw(__("Please set {0}", [__(frappe.meta.get_label(doc.doctype, "company", doc.name))]));
+		}
+
+		return {
+			query: "frappe.contacts.doctype.contact.contact.contact_query",
+			filters: { link_doctype: "Company", link_name: doc.company },
+		};
+	},
+
+	address_query: function (doc) {
+		if (frappe.dynamic_link) {
+			if (!doc[frappe.dynamic_link.fieldname]) {
+				cur_frm.scroll_to_field(frappe.dynamic_link.fieldname);
+				frappe.show_alert({
+					message: __("Please set {0} first.", [
+						__(frappe.meta.get_label(doc.doctype, frappe.dynamic_link.fieldname, doc.name)),
+					]),
+					indicator: "orange",
+				});
+			}
+
+			return {
+				query: "frappe.contacts.doctype.address.address.address_query",
+				filters: {
+					link_doctype: frappe.dynamic_link.doctype,
+					link_name: doc[frappe.dynamic_link.fieldname],
+				},
+			};
+		}
+	},
+
+	company_address_query: function (doc) {
+		if (!doc.company) {
+			cur_frm.scroll_to_field("company");
+			frappe.show_alert({
+				message: __("Please set {0} first.", [
+					__(frappe.meta.get_label(doc.doctype, "company", doc.name)),
+				]),
+				indicator: "orange",
+			});
+		}
+
+		let filters = { link_doctype: "Company", link_name: doc.company || "" };
+		const is_drop_ship = (doc.items || []).some((item) => item.delivered_by_supplier);
+		if (is_drop_ship) filters = {};
+
+		return {
+			query: "frappe.contacts.doctype.address.address.address_query",
+			filters: filters,
+		};
+	},
+
+	dispatch_address_query: function (doc) {
+		let filters = { link_doctype: "Company", link_name: doc.company || "" };
+		const is_drop_ship = doc.items.some((item) => item.delivered_by_supplier);
+		if (is_drop_ship) filters = {};
+		return {
+			query: "frappe.contacts.doctype.address.address.address_query",
+			filters: filters,
+		};
+	},
+
+	supplier_filter: function (doc) {
+		if (!doc.supplier) {
+			cur_frm.scroll_to_field("supplier");
+			frappe.show_alert({
+				message: __("Please set {0} first.", [
+					__(frappe.meta.get_label(doc.doctype, "supplier", doc.name)),
+				]),
+				indicator: "orange",
+			});
+		}
+
+		return { filters: { supplier: doc.supplier } };
+	},
+
+	not_a_group_filter: function () {
+		return { filters: { is_group: 0 } };
+	},
+
+	warehouse: function (doc) {
+		return {
+			filters: [
+				["Warehouse", "company", "in", ["", cstr(doc.company)]],
+				["Warehouse", "is_group", "=", 0],
+			],
+		};
+	},
+
+	get_filtered_dimensions: function (doc, child_fields, dimension, company) {
+		let account = "";
+
+		child_fields.forEach((field) => {
+			if (!account) {
+				account = doc[field];
+			}
+		});
+
+		return {
+			query: "hisaabdari.controllers.queries.get_filtered_dimensions",
+			filters: {
+				dimension: dimension,
+				account: account,
+				company: company,
+			},
+		};
+	},
+});
+
+hisaabdari.queries.setup_queries = function (frm, options, query_fn) {
+	var me = this;
+	var set_query = function (doctype, parentfield) {
+		var link_fields = frappe.meta.get_docfields(doctype, frm.doc.name, {
+			fieldtype: "Link",
+			options: options,
+		});
+		$.each(link_fields, function (i, df) {
+			if (parentfield) {
+				frm.set_query(df.fieldname, parentfield, query_fn);
+			} else {
+				frm.set_query(df.fieldname, query_fn);
+			}
+		});
+	};
+
+	set_query(frm.doc.doctype);
+
+	// warehouse field in tables
+	$.each(
+		frappe.meta.get_docfields(frm.doc.doctype, frm.doc.name, { fieldtype: "Table" }),
+		function (i, df) {
+			set_query(df.options, df.fieldname);
+		}
+	);
+};
+
+/* 	if item code is selected in child table
+	then list down warehouses with its quantity
+	else apply default filters.
+*/
+hisaabdari.queries.setup_warehouse_query = function (frm) {
+	frm.set_query("warehouse", "items", function (doc, cdt, cdn) {
+		var row = locals[cdt][cdn];
+		var filters = hisaabdari.queries.warehouse(frm.doc);
+		if (row.item_code) {
+			$.extend(filters, { query: "hisaabdari.controllers.queries.warehouse_query" });
+			filters["filters"].push(["Bin", "item_code", "=", row.item_code]);
+		}
+		return filters;
+	});
+};

@@ -1,0 +1,1009 @@
+// Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
+// License: GNU General Public License v3. See license.txt
+frappe.provide("hisaabdari");
+frappe.provide("hisaabdari.utils");
+frappe.provide("hisaabdari.stock.utils");
+
+$.extend(hisaabdari, {
+	get_currency: function (company) {
+		if (!company && cur_frm) company = cur_frm.doc.company;
+		if (company)
+			return frappe.get_doc(":Company", company)?.default_currency || frappe.boot.sysdefaults.currency;
+		else return frappe.boot.sysdefaults.currency;
+	},
+
+	get_presentation_currency_list: () => {
+		const docs = frappe.boot.docs;
+		let currency_list = docs.filter((d) => d.doctype === ":Currency").map((d) => d.name);
+		currency_list.unshift("");
+		return currency_list;
+	},
+
+	toggle_serial_batch_fields(frm) {
+		let hide_fields = cint(frappe.user_defaults?.enable_serial_and_batch_no_for_item) === 0 ? 1 : 0;
+		if (!hide_fields) {
+			return;
+		}
+
+		let fields = ["serial_and_batch_bundle", "use_serial_batch_fields", "serial_no", "batch_no"];
+
+		if (
+			["Stock Entry", "Purchase Receipt", "Purchase Invoice", "Stock Reconciliation"].includes(
+				frm.doc.doctype
+			)
+		) {
+			fields.push("add_serial_batch_bundle");
+		}
+
+		if (["Stock Reconciliation"].includes(frm.doc.doctype)) {
+			fields.push("reconcile_all_serial_batch");
+		}
+
+		if (["Sales Invoice", "Delivery Note"].includes(frm.doc.doctype)) {
+			fields.push("pick_serial_and_batch");
+		}
+
+		if (["Purchase Receipt", "Purchase Invoice"].includes(frm.doc.doctype)) {
+			fields.push(
+				"add_serial_batch_for_rejected_qty",
+				"rejected_serial_and_batch_bundle",
+				"rejected_serial_no"
+			);
+		}
+
+		let child_name = "items";
+
+		let sn_field = frm.fields_dict[child_name].grid.docfields.filter((d) => d.fieldname === "serial_no");
+		if (sn_field?.length && sn_field[0].hidden === 1) {
+			// Already field is hidden
+			return;
+		}
+
+		fields.forEach((field) => {
+			if (frm.fields_dict[child_name].get_field(field)) {
+				frm.fields_dict[child_name].grid.update_docfield_property(field, "hidden", hide_fields);
+
+				frm.fields_dict[child_name].grid.update_docfield_property(
+					field,
+					"in_list_view",
+					hide_fields ? 0 : 1
+				);
+			}
+		});
+
+		frm.fields_dict[child_name].grid.reset_grid();
+	},
+
+	toggle_naming_series: function () {
+		if (
+			cur_frm &&
+			cur_frm.fields_dict.naming_series &&
+			cur_frm.meta.naming_rule == 'By "Naming Series" field'
+		) {
+			cur_frm.toggle_display("naming_series", cur_frm.doc.__islocal ? true : false);
+		}
+	},
+
+	hide_company: function (frm) {
+		if (frm?.fields_dict.company) {
+			var companies = Object.keys(locals[":Company"] || {});
+			if (companies.length === 1) {
+				if (!frm.doc.company) frm.set_value("company", companies[0]);
+				frm.toggle_display("company", false);
+			} else if (hisaabdari.last_selected_company) {
+				if (!frm.doc.company) frm.set_value("company", hisaabdari.last_selected_company);
+			}
+		}
+	},
+
+	is_perpetual_inventory_enabled: function (company) {
+		if (company) {
+			let company_local = locals[":Company"] && locals[":Company"][company];
+			if (company_local) {
+				return cint(company_local.enable_perpetual_inventory);
+			}
+		}
+	},
+
+	stale_rate_allowed: () => {
+		return cint(frappe.boot.sysdefaults.allow_stale);
+	},
+
+	setup_serial_or_batch_no: function () {
+		// Deprecated in v15
+	},
+
+	route_to_adjustment_jv: (args) => {
+		frappe.model.with_doctype("Journal Entry", () => {
+			// route to adjustment Journal Entry to handle Account Balance and Stock Value mismatch
+			let journal_entry = frappe.model.get_new_doc("Journal Entry");
+
+			args.accounts.forEach((je_account) => {
+				let child_row = frappe.model.add_child(journal_entry, "accounts");
+				child_row.account = je_account.account;
+				child_row.debit_in_account_currency = je_account.debit_in_account_currency;
+				child_row.credit_in_account_currency = je_account.credit_in_account_currency;
+				child_row.party_type = "";
+			});
+			frappe.set_route("Form", "Journal Entry", journal_entry.name);
+		});
+	},
+
+	route_to_pending_reposts: (args) => {
+		frappe.set_route("List", "Repost Item Valuation", args);
+	},
+});
+
+$.extend(hisaabdari.utils, {
+	set_party_dashboard_indicators: function (frm) {
+		if (frm.doc.__onload && frm.doc.__onload.dashboard_info) {
+			var company_wise_info = frm.doc.__onload.dashboard_info;
+			if (company_wise_info.length > 1) {
+				company_wise_info.forEach(function (info) {
+					hisaabdari.utils.add_indicator_for_multicompany(frm, info);
+				});
+			} else if (company_wise_info.length === 1) {
+				frm.dashboard.add_indicator(
+					__("Annual Billing: {0}", [
+						format_currency(
+							company_wise_info[0].billing_this_year,
+							company_wise_info[0].currency
+						),
+					]),
+					"blue"
+				);
+				var info = company_wise_info[0];
+				var is_advance = info.balance_label !== "Total Unpaid";
+				var indicator_label =
+					info.balance_label === "Total Advance Paid"
+						? __("Total Advance Paid: {0}", [format_currency(info.balance_amount, info.currency)])
+						: info.balance_label === "Total Advance Received"
+						? __("Total Advance Received: {0}", [
+								format_currency(info.balance_amount, info.currency),
+						  ])
+						: __("Total Unpaid: {0}", [format_currency(info.balance_amount, info.currency)]);
+				frm.dashboard.add_indicator(
+					indicator_label,
+					is_advance ? "green" : info.balance_amount ? "orange" : "green"
+				);
+			}
+		}
+	},
+
+	add_indicator_for_multicompany: function (frm, info) {
+		frm.dashboard.stats_area.show();
+		frm.dashboard.stats_area_row.addClass("flex");
+		frm.dashboard.stats_area_row.css("flex-wrap", "wrap");
+
+		var is_advance = info.balance_label !== "Total Unpaid";
+		var color = is_advance ? "green" : info.balance_amount ? "orange" : "green";
+		var balance_label_text =
+			info.balance_label === "Total Advance Paid"
+				? __("Total Advance Paid")
+				: info.balance_label === "Total Advance Received"
+				? __("Total Advance Received")
+				: __("Total Unpaid");
+
+		var indicator = $(
+			'<div class="flex-column col-xs-6">' +
+				'<div style="margin-top:10px"><h6>' +
+				info.company +
+				"</h6></div>" +
+				'<div class="badge-link small" style="margin-bottom:10px"><span class="indicator blue">' +
+				"Annual Billing: " +
+				format_currency(info.billing_this_year, info.currency) +
+				"</span></div>" +
+				'<div class="badge-link small" style="margin-bottom:10px">' +
+				'<span class="indicator ' +
+				color +
+				'">' +
+				balance_label_text +
+				": " +
+				format_currency(info.balance_amount, info.currency) +
+				"</span></div>" +
+				"</div>"
+		).appendTo(frm.dashboard.stats_area_row);
+
+		return indicator;
+	},
+
+	get_party_name: function (party_type) {
+		var dict = {
+			Customer: "customer_name",
+			Supplier: "supplier_name",
+			Member: "member_name",
+		};
+		return dict[party_type];
+	},
+
+	copy_value_in_all_rows: function (doc, dt, dn, table_fieldname, fieldname) {
+		var d = locals[dt][dn];
+		if (d[fieldname]) {
+			var cl = doc[table_fieldname] || [];
+			for (var i = 0; i < cl.length; i++) {
+				if (!cl[i][fieldname]) cl[i][fieldname] = d[fieldname];
+			}
+		}
+		refresh_field(table_fieldname);
+	},
+
+	get_terms: function (tc_name, doc, callback) {
+		if (tc_name) {
+			return frappe.call({
+				method: "hisaabdari.setup.doctype.terms_and_conditions.terms_and_conditions.get_terms_and_conditions",
+				args: {
+					template_name: tc_name,
+					doc: doc,
+				},
+				callback: function (r) {
+					callback(r);
+				},
+			});
+		}
+	},
+
+	make_bank_account: function (doctype, docname) {
+		frappe.new_doc("Bank Account", {
+			party_type: doctype,
+			party: docname,
+		});
+	},
+
+	add_dimensions: function (report_name, index) {
+		let filters = frappe.query_reports[report_name].filters;
+
+		frappe.call({
+			method: "hisaabdari.accounts.doctype.accounting_dimension.accounting_dimension.get_dimensions",
+			callback: function (r) {
+				let accounting_dimensions = r.message[0];
+				accounting_dimensions.forEach((dimension) => {
+					let found = filters.some((el) => el.fieldname === dimension["fieldname"]);
+
+					if (!found) {
+						filters.splice(index, 0, {
+							fieldname: dimension["fieldname"],
+							label: __(dimension["label"]),
+							fieldtype: "MultiSelectList",
+							get_data: function (txt) {
+								return hisaabdari.utils.get_link_options(dimension["document_type"], txt);
+							},
+						});
+					}
+				});
+			},
+		});
+	},
+
+	add_inventory_dimensions: function (report_name, index) {
+		let filters = frappe.query_reports[report_name].filters;
+
+		frappe.call({
+			method: "hisaabdari.stock.doctype.inventory_dimension.inventory_dimension.get_inventory_dimensions",
+			callback: function (r) {
+				if (r.message && r.message.length) {
+					r.message.forEach((dimension) => {
+						let existing_filter = filters.filter((el) => el.fieldname === dimension["fieldname"]);
+
+						if (!existing_filter.length) {
+							filters.splice(index, 0, {
+								fieldname: dimension["fieldname"],
+								label: __(dimension["doctype"]),
+								fieldtype: "MultiSelectList",
+								depends_on:
+									report_name === "Stock Balance"
+										? "eval:doc.show_dimension_wise_stock === 1"
+										: "",
+								get_data: function (txt) {
+									return hisaabdari.utils.get_link_options(dimension["doctype"], txt);
+								},
+							});
+						} else {
+							existing_filter[0]["fieldtype"] = "MultiSelectList";
+							existing_filter[0]["get_data"] = function (txt) {
+								return hisaabdari.utils.get_link_options(dimension["doctype"], txt);
+							};
+						}
+					});
+				}
+			},
+		});
+	},
+
+	make_subscription: function (doctype, docname) {
+		frappe.call({
+			method: "frappe.automation.doctype.auto_repeat.auto_repeat.make_auto_repeat",
+			args: {
+				doctype: doctype,
+				docname: docname,
+			},
+			callback: function (r) {
+				var doclist = frappe.model.sync(r.message);
+				frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+			},
+		});
+	},
+
+	/**
+	 * Checks if the first row of a given child table is empty
+	 * @param child_table - Child table Doctype
+	 * @return {Boolean}
+	 **/
+	first_row_is_empty: function (child_table) {
+		if ($.isArray(child_table) && child_table.length > 0) {
+			return !child_table[0].item_code;
+		}
+		return false;
+	},
+
+	/**
+	 * Removes the first row of a child table if it is empty
+	 * @param {_Frm} frm - The current form
+	 * @param {String} child_table_name - The child table field name
+	 * @return {Boolean}
+	 **/
+	remove_empty_first_row: function (frm, child_table_name) {
+		const rows = frm["doc"][child_table_name];
+		if (this.first_row_is_empty(rows)) {
+			frm["doc"][child_table_name] = rows.splice(1);
+		}
+		return rows;
+	},
+	/**
+	 * Row flags for the Account / Cost Center trees: the caller's badges plus
+	 * a shared "Disabled" marker for records shown through the tree's
+	 * "include disabled" toggle.
+	 * @param {Object} node tree node (from treeview_settings.onrender)
+	 * @param {Array<string|HTMLElement>} flags badge markup / elements
+	 */
+	render_tree_node_flags: function (node, flags = []) {
+		if (cint(node.data?.disabled)) {
+			flags.push(frappe.ui.badge({ label: __("Disabled"), variant: "outline" }));
+			node.$tree_link.find("a.tree-label").addClass("text-ink-gray-5");
+		}
+		if (!flags.length) return;
+		const $flags = $(
+			'<span class="tree-node-flags inline-flex items-center gap-1.5 ms-2 shrink-0"></span>'
+		);
+		flags.forEach((flag) => $flags.append(flag));
+		$flags.insertAfter(node.$tree_link.find("a.tree-label"));
+	},
+
+	get_tree_options: function (option) {
+		// get valid options for tree based on user permission & locals dict
+		let unscrub_option = frappe.model.unscrub(option);
+		let user_permission = frappe.defaults.get_user_permissions();
+		let options;
+
+		if (user_permission && user_permission[unscrub_option]) {
+			options = user_permission[unscrub_option].map((perm) => perm.doc);
+		} else {
+			options = $.map(locals[`:${unscrub_option}`], function (c) {
+				return c.name;
+			}).sort();
+		}
+
+		// filter unique values, as there may be multiple user permissions for any value
+		return options.filter((value, index, self) => self.indexOf(value) === index);
+	},
+	get_tree_default: function (option) {
+		// set default for a field based on user permission
+		let options = this.get_tree_options(option);
+		if (options.includes(frappe.defaults.get_default(option))) {
+			return frappe.defaults.get_default(option);
+		} else {
+			return options[0];
+		}
+	},
+	overrides_parent_value_in_all_rows: function (doc, dt, dn, table_fieldname, fieldname, parent_fieldname) {
+		if (doc[parent_fieldname]) {
+			let cl = doc[table_fieldname] || [];
+			for (let i = 0; i < cl.length; i++) {
+				cl[i][fieldname] = doc[parent_fieldname];
+			}
+			frappe.refresh_field(table_fieldname);
+		}
+	},
+	create_new_doc: function (doctype, update_fields) {
+		frappe.model.with_doctype(doctype, function () {
+			var new_doc = frappe.model.get_new_doc(doctype);
+			for (let [key, value] of Object.entries(update_fields)) {
+				new_doc[key] = value;
+			}
+			frappe.ui.form.make_quick_entry(doctype, null, null, new_doc);
+		});
+	},
+
+	pick_serial_and_batch_bundle(frm, cdt, cdn, type_of_transaction, warehouse_field) {
+		let item_row = frappe.get_doc(cdt, cdn);
+		item_row.type_of_transaction = type_of_transaction;
+
+		frappe.db.get_value("Item", item_row.item_code, ["has_batch_no", "has_serial_no"]).then((r) => {
+			item_row.has_batch_no = r.message.has_batch_no;
+			item_row.has_serial_no = r.message.has_serial_no;
+
+			new hisaabdari.SerialBatchPackageSelector(frm, item_row, (r) => {
+				if (r) {
+					let update_values = {
+						serial_and_batch_bundle: r.name,
+						qty: Math.abs(r.total_qty),
+					};
+
+					if (!warehouse_field) {
+						warehouse_field = "warehouse";
+					}
+
+					if (r.warehouse) {
+						update_values[warehouse_field] = r.warehouse;
+					}
+
+					frappe.model.set_value(item_row.doctype, item_row.name, update_values);
+				}
+			});
+		});
+	},
+
+	get_link_options: function (doctype, txt, filters) {
+		const page_length = cint(frappe.boot.sysdefaults?.link_field_results_limit) || 10;
+		return frappe.db.get_link_options(doctype, txt, filters, page_length);
+	},
+
+	get_fiscal_year: function (date, with_dates = false, raise_on_missing = true) {
+		if (!frappe.boot.setup_complete) {
+			return;
+		}
+		const today = frappe.datetime.get_today();
+		if (!date) {
+			date = today;
+		}
+
+		let fiscal_year = "";
+		if (
+			frappe.boot.current_fiscal_year &&
+			date >= frappe.boot.current_fiscal_year[1] &&
+			date <= frappe.boot.current_fiscal_year[2]
+		) {
+			if (with_dates) fiscal_year = frappe.boot.current_fiscal_year;
+			else fiscal_year = frappe.boot.current_fiscal_year[0];
+		} else if (today != date) {
+			frappe.call({
+				method: "hisaabdari.accounts.utils.get_fiscal_year",
+				type: "GET", // make it cacheable
+				args: {
+					date: date,
+					raise_on_missing: raise_on_missing,
+				},
+				async: false,
+				callback: function (r) {
+					if (r.message) {
+						if (with_dates) fiscal_year = r.message;
+						else fiscal_year = r.message[0];
+					}
+				},
+			});
+		}
+		return fiscal_year;
+	},
+
+	set_letter_head: function (frm) {
+		if (frm.fields_dict.letter_head) {
+			frappe.db.get_value("Company", frm.doc.company, "default_letter_head").then((res) => {
+				if (res.message?.default_letter_head) {
+					frm.set_value("letter_head", res.message.default_letter_head);
+				}
+			});
+		}
+	},
+});
+
+hisaabdari.utils.update_child_items = function (opts) {
+	const frm = opts.frm;
+	const cannot_add_row = typeof opts.cannot_add_row === "undefined" ? true : opts.cannot_add_row;
+	const child_docname = typeof opts.cannot_add_row === "undefined" ? "items" : opts.child_docname;
+	const child_meta = frappe.get_meta(`${frm.doc.doctype} Item`);
+	const get_precision = (fieldname) => child_meta.fields.find((f) => f.fieldname == fieldname).precision;
+	const get_item_details = (item_code, row) =>
+		frm.call({
+			method: "hisaabdari.stock.get_item_details.get_item_details",
+			args: {
+				doc: frm.doc,
+				ctx: {
+					item_code: item_code,
+					set_warehouse: frm.doc.set_warehouse,
+					customer: frm.doc.customer || frm.doc.party_name,
+					quotation_to: frm.doc.quotation_to,
+					supplier: frm.doc.supplier,
+					currency: frm.doc.currency,
+					is_internal_supplier: frm.doc.is_internal_supplier,
+					is_internal_customer: frm.doc.is_internal_customer,
+					conversion_rate: frm.doc.conversion_rate,
+					price_list: frm.doc.selling_price_list || frm.doc.buying_price_list,
+					price_list_currency: frm.doc.price_list_currency,
+					plc_conversion_rate: frm.doc.plc_conversion_rate,
+					company: frm.doc.company,
+					order_type: frm.doc.order_type,
+					is_return: cint(frm.doc.is_return),
+					doctype: frm.doc.doctype,
+					name: frm.doc.name,
+					qty: row.qty || 1,
+					uom: row.uom,
+					child_doctype: frm.doc.doctype + " Item",
+				},
+			},
+		});
+
+	this.data = frm.doc[opts.child_docname].map((d) => {
+		return {
+			docname: d.name,
+			name: d.name,
+			item_code: d.item_code,
+			item_name: d.item_name,
+			delivery_date: d.delivery_date,
+			schedule_date: d.schedule_date,
+			conversion_factor: d.conversion_factor,
+			qty: d.qty,
+			rate: d.rate,
+			uom: d.uom,
+			warehouse: d.warehouse,
+			description: d.description,
+		};
+	});
+
+	const fields = [
+		{
+			fieldtype: "Data",
+			fieldname: "docname",
+			read_only: 1,
+			hidden: 1,
+		},
+		{
+			fieldtype: "Link",
+			fieldname: "item_code",
+			options: "Item",
+			in_list_view: 1,
+			read_only: 0,
+			disabled: 0,
+			label: __("Item Code"),
+			formatter: (value) => value,
+			get_query: function () {
+				let filters;
+				if (frm.doc.doctype == "Sales Order") {
+					filters = { is_sales_item: 1 };
+				} else if (frm.doc.doctype == "Purchase Order") {
+					filters = { is_purchase_item: 1 };
+				}
+				return {
+					query: "hisaabdari.controllers.queries.item_query",
+					filters: filters,
+				};
+			},
+			change: function () {
+				const me = this;
+
+				get_item_details(this.value, me.doc).then((r) => {
+					if (r.message) {
+						const {
+							qty,
+							price_list_rate,
+							uom,
+							conversion_factor,
+							item_name,
+							description,
+							warehouse,
+						} = r.message;
+						const row = dialog.fields_dict.trans_items.df.data.find(
+							(row) => row.name == me.doc.name
+						);
+						if (row) {
+							Object.assign(row, {
+								conversion_factor: me.doc.conversion_factor || conversion_factor,
+								uom: me.doc.uom || uom,
+								qty: me.doc.qty || qty,
+								rate: me.doc.rate || price_list_rate,
+								price_list_rate: price_list_rate,
+								item_name: item_name,
+								description: me.doc.description || description,
+								warehouse: me.doc.docname ? me.doc.warehouse : warehouse,
+							});
+							dialog.fields_dict.trans_items.grid.refresh();
+						}
+					}
+				});
+			},
+		},
+		{
+			fieldtype: "Data",
+			fieldname: "item_name",
+			label: __("Item Name"),
+			read_only: 1,
+			in_list_view: 1,
+		},
+		{
+			fieldtype: "Link",
+			fieldname: "uom",
+			options: "UOM",
+			read_only: 0,
+			label: __("UOM"),
+			reqd: 1,
+			onchange: function () {
+				frappe.call({
+					method: "hisaabdari.stock.get_item_details.get_conversion_factor",
+					args: { item_code: this.doc.item_code, uom: this.value },
+					callback: (r) => {
+						if (!r.exc) {
+							if (this.doc.conversion_factor == r.message.conversion_factor) return;
+
+							const docname = this.doc.docname;
+							dialog.fields_dict.trans_items.df.data.some((doc) => {
+								if (doc.docname == docname) {
+									doc.conversion_factor = r.message.conversion_factor;
+									dialog.fields_dict.trans_items.grid.refresh();
+									return true;
+								}
+							});
+						}
+					},
+				});
+
+				if (!this.doc.docname) {
+					get_item_details(this.doc.item_code, this.doc).then((r) => {
+						this.doc.price_list_rate = r.message.price_list_rate;
+					});
+				}
+			},
+		},
+		{
+			fieldtype: "Float",
+			fieldname: "qty",
+			default: 0,
+			read_only: 0,
+			in_list_view: 1,
+			label: __("Qty"),
+			precision: get_precision("qty"),
+		},
+		{
+			fieldtype: "Currency",
+			fieldname: "rate",
+			options: "currency",
+			default: 0,
+			read_only: 0,
+			in_list_view: 1,
+			label: __("Rate"),
+			precision: get_precision("rate"),
+		},
+		{
+			fieldtype: "Text Editor",
+			fieldname: "description",
+			read_only: 0,
+			label: __("Description"),
+		},
+	];
+
+	if (frm.doc.doctype == "Sales Order" || frm.doc.doctype == "Purchase Order") {
+		fields.splice(3, 0, {
+			fieldtype: "Date",
+			fieldname: frm.doc.doctype == "Sales Order" ? "delivery_date" : "schedule_date",
+			in_list_view: 1,
+			label: frm.doc.doctype == "Sales Order" ? __("Delivery Date") : __("Reqd by date"),
+			default: frm.doc.doctype == "Sales Order" ? frm.doc.delivery_date : frm.doc.schedule_date,
+			reqd: 1,
+		});
+		fields.splice(4, 0, {
+			fieldtype: "Float",
+			fieldname: "conversion_factor",
+			label: __("Conversion Factor"),
+			precision: get_precision("conversion_factor"),
+		});
+	}
+
+	const warehouse_df = child_meta.fields.find((f) => f.fieldname == "warehouse");
+	if (warehouse_df) {
+		fields.splice(3, 0, {
+			fieldtype: "Link",
+			fieldname: "warehouse",
+			options: "Warehouse",
+			in_list_view: 1,
+			label: __(warehouse_df.label),
+			// only new rows may set it, existing rows would leave their
+			// reserved qty stranded in the previous warehouse's bin
+			read_only_depends_on: "eval:doc.docname",
+			get_query: () => {
+				return {
+					filters: {
+						company: frm.doc.company,
+						is_group: 0,
+						disabled: 0,
+					},
+				};
+			},
+		});
+	}
+
+	let dialog = new frappe.ui.Dialog({
+		title: __("Update Items"),
+		size: "extra-large",
+		fields: [
+			{
+				fieldname: "trans_items",
+				fieldtype: "Table",
+				label: "Items",
+				cannot_add_rows: cannot_add_row,
+				in_place_edit: false,
+				reqd: 1,
+				data: this.data,
+				get_data: () => {
+					return this.data;
+				},
+				fields: fields,
+			},
+		],
+		primary_action: function () {
+			this.update_items();
+		},
+		update_items: function () {
+			const trans_items = this.get_values()["trans_items"].filter((item) => !!item.item_code);
+			frappe.call({
+				method: "hisaabdari.controllers.accounts_controller.update_child_qty_rate",
+				freeze: true,
+				args: {
+					parent_doctype: frm.doc.doctype,
+					trans_items: trans_items,
+					parent_doctype_name: frm.doc.name,
+					child_docname: child_docname,
+				},
+				callback: function () {
+					frm.reload_doc();
+				},
+			});
+			this.hide();
+			refresh_field("items");
+		},
+		primary_action_label: __("Update"),
+	});
+
+	dialog.show();
+};
+
+hisaabdari.utils.map_current_doc = function (opts) {
+	function _map() {
+		if ($.isArray(cur_frm.doc.items) && cur_frm.doc.items.length > 0) {
+			// remove first item row if empty
+			if (!cur_frm.doc.items[0].item_code) {
+				cur_frm.doc.items = cur_frm.doc.items.splice(1);
+			}
+
+			// find the doctype of the items table
+			var items_doctype = frappe.meta.get_docfield(cur_frm.doctype, "items").options;
+
+			// find the link fieldname from items table for the given
+			// source_doctype
+			var link_fieldname = null;
+			frappe.get_meta(items_doctype).fields.forEach(function (d) {
+				if (d.options === opts.source_doctype) link_fieldname = d.fieldname;
+			});
+
+			// search in existing items if the source_name is already set and full qty fetched
+			var already_set = false;
+			var item_qty_map = {};
+
+			$.each(cur_frm.doc.items, function (i, d) {
+				opts.source_name.forEach(function (src) {
+					if (d[link_fieldname] == src) {
+						already_set = true;
+						if (item_qty_map[d.item_code]) item_qty_map[d.item_code] += flt(d.qty);
+						else item_qty_map[d.item_code] = flt(d.qty);
+					}
+				});
+			});
+
+			if (already_set) {
+				opts.source_name.forEach(function (src) {
+					frappe.model.with_doc(opts.source_doctype, src, function (r) {
+						var source_doc = frappe.model.get_doc(opts.source_doctype, src);
+						$.each(source_doc.items || [], function (i, row) {
+							if (row.qty > flt(item_qty_map[row.item_code])) {
+								already_set = false;
+								return false;
+							}
+						});
+					});
+
+					if (already_set) {
+						frappe.msgprint(
+							__("You have already selected items from {0} {1}", [__(opts.source_doctype), src])
+						);
+						return;
+					}
+				});
+			}
+		}
+
+		return frappe.call({
+			// Sometimes we hit the limit for URL length of a GET request
+			// as we send the full target_doc. Hence this is a POST request.
+			type: "POST",
+			method: "frappe.model.mapper.map_docs",
+			args: {
+				method: opts.method,
+				source_names: opts.source_name,
+				target_doc: cur_frm.doc,
+				args: opts.args,
+			},
+			freeze: true,
+			freeze_message: __("Mapping {0} ...", [opts.source_doctype]),
+			callback: function (r) {
+				if (!r.exc) {
+					frappe.model.sync(r.message);
+					cur_frm.dirty();
+					cur_frm.refresh();
+				}
+			},
+		});
+	}
+
+	let query_args = {};
+	if (opts.get_query_filters) {
+		query_args.filters = opts.get_query_filters;
+	}
+
+	if (opts.get_query_method) {
+		query_args.query = opts.get_query_method;
+	}
+
+	if (query_args.filters || query_args.query) {
+		opts.get_query = () => JSON.parse(JSON.stringify(query_args));
+	}
+
+	if (opts.source_doctype) {
+		let data_fields = [];
+		if (["Purchase Receipt", "Delivery Note", "Purchase Invoice"].includes(opts.source_doctype)) {
+			let target_meta = frappe.get_meta(cur_frm.doc.doctype);
+			if (target_meta.fields.find((f) => f.fieldname === "taxes")) {
+				data_fields.push({
+					fieldname: "merge_taxes",
+					fieldtype: "Check",
+					label: __("Merge taxes from multiple documents"),
+				});
+			}
+		}
+		const d = new frappe.ui.form.MultiSelectDialog({
+			doctype: opts.source_doctype,
+			target: opts.target,
+			date_field: opts.date_field || undefined,
+			setters: opts.setters,
+			read_only_setters: opts.read_only_setters,
+			data_fields: data_fields,
+			get_query: opts.get_query,
+			add_filters_group: 1,
+			allow_child_item_selection: opts.allow_child_item_selection,
+			child_fieldname: opts.child_fieldname,
+			child_columns: opts.child_columns,
+			size: opts.size,
+			action: function (selections, args) {
+				let values = selections;
+				if (values.length === 0) {
+					frappe.msgprint(__("Please select {0}", [opts.source_doctype]));
+					return;
+				}
+
+				opts.source_name = Array.isArray(values) ? [...new Set(values)] : values;
+
+				if (
+					opts.allow_child_item_selection ||
+					["Purchase Receipt", "Delivery Note"].includes(opts.source_doctype)
+				) {
+					// args contains filtered child docnames
+					opts.args = args;
+				}
+				d.dialog.hide();
+				_map();
+			},
+		});
+
+		return d;
+	}
+
+	if (opts.source_name) {
+		opts.source_name = [opts.source_name];
+		_map();
+	}
+};
+
+frappe.form.link_formatters["Item"] = function (value, doc, df) {
+	return add_link_title(value, doc, df, "item_name");
+};
+
+/**
+ * Add a title to a link value based on the provided document and field information.
+ *
+ * @param {string} value - The value to add a link title to.
+ * @param {Object} doc - The document object.
+ * @param {Object} df - The field object.
+ * @param {string} title_field - The field name for the title.
+ * @returns {string} - The link value with the added title.
+ */
+function add_link_title(value, doc, df, title_field) {
+	const title_belongs_to_value = df.options !== df.parent || value === doc.name;
+	if (value && title_belongs_to_value && doc[title_field]) {
+		if (doc[title_field] !== value && doc[df.fieldname] === value) {
+			return value + ": " + doc[title_field];
+		} else if (doc.doctype == df.parent) {
+			return doc[title_field];
+		} else {
+			return value;
+		}
+	} else {
+		return value;
+	}
+}
+
+// add description on posting time
+$(document).on("app_ready", function () {
+	if (!frappe.datetime.is_timezone_same()) {
+		$.each(
+			[
+				"Stock Reconciliation",
+				"Stock Entry",
+				"Stock Ledger Entry",
+				"Delivery Note",
+				"Purchase Receipt",
+				"Sales Invoice",
+			],
+			function (i, d) {
+				frappe.ui.form.on(d, "onload", function (frm) {
+					cur_frm.set_df_property("posting_time", "description", frappe.sys_defaults.time_zone);
+				});
+			}
+		);
+	}
+});
+
+function attach_selector_button(inner_text, append_loction, context, grid_row) {
+	let $btn_div = $("<div>").css({ "margin-bottom": "10px", "margin-top": "10px" }).appendTo(append_loction);
+	let $btn = $(`<button class="btn btn-sm btn-default">${inner_text}</button>`).appendTo($btn_div);
+
+	$btn.on("click", function () {
+		context.show_serial_batch_selector(grid_row.frm, grid_row.doc, "", "", true);
+	});
+}
+
+$.extend(hisaabdari.stock.utils, {
+	set_item_details_using_barcode(frm, child_row, callback) {
+		const barcode_scanner = new hisaabdari.utils.BarcodeScanner({ frm: frm });
+		barcode_scanner.scan_api_call(child_row.barcode, callback);
+	},
+
+	get_serial_range(range_string, separator) {
+		/* Return an array of serial numbers generated from a range string.
+
+		Examples (using separator "::"):
+			- "1::5" => ["1", "2", "3", "4", "5"]
+			- "SN0009::12" => ["SN0009", "SN0010", "SN0011", "SN0012"]
+			- "ABC//05::8" => ["ABC//05", "ABC//06", "ABC//07", "ABC//08"]
+		*/
+		if (!range_string) {
+			return;
+		}
+
+		const [start_str, end_str] = range_string.trim().split(separator);
+
+		if (!start_str || !end_str) {
+			return;
+		}
+
+		const end_int = parseInt(end_str);
+		const length_difference = start_str.length - end_str.length;
+		const start_int = parseInt(start_str.substring(length_difference));
+
+		if (isNaN(start_int) || isNaN(end_int)) {
+			return;
+		}
+
+		const serial_numbers = Array(end_int - start_int + 1)
+			.fill(1)
+			.map((x, y) => x + y)
+			.map((x) => x + start_int - 1);
+		return serial_numbers.map((val) => {
+			return start_str.substring(0, length_difference) + val.toString().padStart(end_str.length, "0");
+		});
+	},
+});

@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.py~
+*.swp
+*.swo
+.DS_Store
+*.egg-info/
+dist/
+node_modules/
+hisaabdari/public/dist/
+hisaabdari/public/node_modules
+.idea/
+.vscode/
+.env

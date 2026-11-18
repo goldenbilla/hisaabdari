@@ -1,0 +1,414 @@
+# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
+# License: GNU General Public License v3. See license.txt
+
+
+import json
+import os
+
+import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.desk.page.setup_wizard.setup_wizard import add_all_roles_to
+
+from hisaabdari.setup.utils import identity as _
+
+from .default_success_action import get_default_success_action
+
+def after_install():
+	if not frappe.db.exists("Role", "Analytics"):
+		frappe.get_doc({"doctype": "Role", "role_name": "Analytics"}).insert()
+
+	set_single_defaults()
+	setup_repost_defaults()
+	create_print_setting_custom_fields()
+	create_address_and_contact_custom_fields()
+	setup_company_address_permissions()
+	create_custom_company_links()
+	add_all_roles_to("Administrator")
+	create_default_success_action()
+	create_default_role_profiles()
+	add_company_to_session_defaults()
+	add_standard_navbar_items()
+	add_app_name()
+	update_roles()
+	set_default_print_formats()
+	create_letter_head()
+	toggle_hidden_fields()
+	# nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit -- after_install
+	frappe.db.commit()
+
+
+def set_single_defaults():
+	for dt in (
+		"Accounts Settings",
+		"Print Settings",
+		"Buying Settings",
+		"Selling Settings",
+		"Stock Settings",
+	):
+		default_values = frappe.db.sql(
+			"""select fieldname, `default` from `tabDocField`
+			where parent=%s""",
+			dt,
+		)
+		if default_values:
+			try:
+				doc = frappe.get_doc(dt, dt)
+				for fieldname, value in default_values:
+					doc.set(fieldname, value)
+				doc.flags.ignore_mandatory = True
+				doc.save()
+			except frappe.ValidationError:
+				pass
+
+
+def setup_repost_defaults():
+	accounts_settings = frappe.get_doc("Accounts Settings")
+	for x in frappe.get_hooks("repost_allowed_doctypes"):
+		accounts_settings.append("repost_allowed_types", {"document_type": x})
+	accounts_settings.save()
+
+
+def create_print_setting_custom_fields():
+	create_custom_fields(
+		{
+			"Print Settings": [
+				{
+					"label": _("Compact Item Print"),
+					"fieldname": "compact_item_print",
+					"fieldtype": "Check",
+					"default": "1",
+					"insert_after": "with_letterhead",
+				},
+				{
+					"label": _("Print UOM after Quantity"),
+					"fieldname": "print_uom_after_quantity",
+					"fieldtype": "Check",
+					"default": "0",
+					"insert_after": "compact_item_print",
+				},
+				{
+					"label": _("Print taxes with zero amount"),
+					"fieldname": "print_taxes_with_zero_amount",
+					"fieldtype": "Check",
+					"default": "0",
+					"insert_after": "allow_print_for_cancelled",
+				},
+			]
+		}
+	)
+
+
+def create_address_and_contact_custom_fields():
+	create_custom_fields(
+		{
+			"Address": [
+				{
+					"label": _("Is Your Company Address"),
+					"fieldname": "is_your_company_address",
+					"fieldtype": "Check",
+					"default": "0",
+					"insert_after": "linked_with",
+					"permlevel": 1,
+				},
+			],
+			"Contact": [
+				{
+					"label": _("Is Billing Contact"),
+					"fieldname": "is_billing_contact",
+					"fieldtype": "Check",
+					"insert_after": "is_primary_contact",
+				},
+			],
+		}
+	)
+
+
+def setup_company_address_permissions():
+	"""Only Accounts Manager and System Manager may mark an address as the company's own (permlevel 1)."""
+	from frappe.permissions import add_permission, update_permission_property
+
+	grant_address_read_to_accounts_manager()
+
+	for role in ("System Manager", "Accounts Manager"):
+		add_permission("Address", role, 1)
+		update_permission_property("Address", role, 1, "write", 1)
+
+
+def create_default_success_action():
+	for success_action in get_default_success_action():
+		if not frappe.db.exists("Success Action", success_action.get("ref_doctype")):
+			doc = frappe.get_doc(success_action)
+			doc.insert(ignore_permissions=True)
+
+
+def create_custom_company_links():
+	"""Add link fields to Company in Email Account and Communication.
+
+	These DocTypes are provided by the Frappe Framework but need to be associated
+	with a company in ERPNext to allow for multitenancy. I.e. one company should
+	not be able to access emails and communications from another company.
+	"""
+	create_custom_fields(
+		{
+			"Email Account": [
+				{
+					"label": _("Company"),
+					"fieldname": "company",
+					"fieldtype": "Link",
+					"options": "Company",
+					"insert_after": "email_id",
+				},
+			],
+			"Communication": [
+				{
+					"label": _("Company"),
+					"fieldname": "company",
+					"fieldtype": "Link",
+					"options": "Company",
+					"insert_after": "email_account",
+					"fetch_from": "email_account.company",
+					"read_only": 1,
+				},
+			],
+		},
+	)
+
+
+def add_company_to_session_defaults():
+	settings = frappe.get_single("Session Default Settings")
+	settings.append("session_defaults", {"ref_doctype": "Company"})
+	settings.save()
+
+
+def add_standard_navbar_items():
+	navbar_settings = frappe.get_single("Navbar Settings")
+	erpnext_navbar_items = [
+		{
+			"item_label": _("Documentation"),
+			"item_type": "Route",
+			"route": "https://docs.erpnext.com/",
+			"is_standard": 1,
+		},
+		{
+			"item_label": _("User Forum"),
+			"item_type": "Route",
+			"route": "https://discuss.frappe.io",
+			"is_standard": 1,
+		},
+		{
+			"item_label": _("Frappe School"),
+			"item_type": "Route",
+			"route": "https://frappe.io/school?utm_source=in_app",
+			"is_standard": 1,
+		},
+		{
+			"item_label": _("Report an Issue"),
+			"item_type": "Route",
+			"route": "https://github.com/frappe/erpnext/issues",
+			"is_standard": 1,
+		},
+	]
+
+	current_navbar_items = navbar_settings.help_dropdown
+	navbar_settings.set("help_dropdown", [])
+
+	for item in erpnext_navbar_items:
+		current_labels = [item.get("item_label") for item in current_navbar_items]
+		if item.get("item_label") not in current_labels:
+			navbar_settings.append("help_dropdown", item)
+
+	for item in current_navbar_items:
+		navbar_settings.append(
+			"help_dropdown",
+			{
+				"item_label": item.item_label,
+				"item_type": item.item_type,
+				"route": item.route,
+				"action": item.action,
+				"is_standard": item.is_standard,
+				"hidden": item.hidden,
+			},
+		)
+
+	navbar_settings.save()
+
+
+def add_app_name():
+	frappe.db.set_single_value("System Settings", "app_name", "HisaabDari")
+
+
+def update_roles():
+	website_user_roles = ("Customer", "Supplier")
+	for role in website_user_roles:
+		frappe.db.set_value("Role", role, "desk_access", 0)
+
+
+def create_default_role_profiles():
+	for role_profile_name, roles in DEFAULT_ROLE_PROFILES.items():
+		if frappe.db.exists("Role Profile", role_profile_name):
+			role_profile = frappe.get_doc("Role Profile", role_profile_name)
+			existing_roles = [row.role for row in role_profile.roles]
+
+			role_profile.roles = [row for row in role_profile.roles if row.role in roles]
+
+			for role in roles:
+				if role not in existing_roles:
+					role_profile.append("roles", {"role": role})
+
+			role_profile.save(ignore_permissions=True)
+
+			continue
+
+		role_profile = frappe.new_doc("Role Profile")
+		role_profile.role_profile = role_profile_name
+		for role in roles:
+			role_profile.append("roles", {"role": role})
+
+		role_profile.insert(ignore_permissions=True)
+
+
+def set_default_print_formats():
+	doctypes = (
+		"Sales Order",
+		"Sales Invoice",
+		"Delivery Note",
+		"Purchase Order",
+		"Purchase Invoice",
+		"Quotation",
+	)
+
+	for doctype in doctypes:
+		if frappe.get_meta(doctype).default_print_format:
+			continue
+
+		print_format = f"{doctype} Classic"
+		if not frappe.db.exists("Print Format", print_format):
+			continue
+
+		frappe.make_property_setter(
+			{
+				"doctype": doctype,
+				"doctype_or_field": "DocType",
+				"property": "default_print_format",
+				"value": print_format,
+				"property_type": "Link",
+			},
+			validate_fields_for_doctype=False,
+		)
+
+
+def create_letter_head():
+	base_path = frappe.get_app_path("hisaabdari", "accounts", "letterhead")
+
+	letterheads = {
+		"Company Letterhead": "company_letterhead.html",
+		"Company Letterhead - Grey": "company_letterhead_grey.html",
+	}
+
+	for name, filename in letterheads.items():
+		if not frappe.db.exists("Letter Head", name):
+			content = frappe.read_file(os.path.join(base_path, filename))
+			doc = frappe.get_doc(
+				{
+					"doctype": "Letter Head",
+					"letter_head_name": name,
+					"source": "HTML",
+					"content": content,
+					"is_default": 1 if name == "Company Letterhead - Grey" else 0,
+				}
+			)
+			doc.insert(ignore_permissions=True)
+
+
+def toggle_hidden_fields():
+	from hisaabdari.accounts.doctype.accounts_settings.accounts_settings import (
+		toggle_accounting_dimension_sections,
+		toggle_sales_discount_section,
+	)
+	from hisaabdari.selling.doctype.selling_settings.selling_settings import (
+		toggle_utm_analytics_section,
+	)
+
+	acc_settings = frappe.get_doc("Accounts Settings")
+	toggle_accounting_dimension_sections(not acc_settings.enable_accounting_dimensions)
+	toggle_sales_discount_section(not acc_settings.enable_discounts_and_margin)
+
+	selling_settings = frappe.get_doc("Selling Settings")
+	toggle_utm_analytics_section(not selling_settings.enable_utm)
+
+
+DEFAULT_ROLE_PROFILES = {
+	_("Inventory"): [
+		"Stock User",
+		"Stock Manager",
+		"Item Manager",
+	],
+	_("Accounts"): [
+		"Accounts User",
+		"Accounts Manager",
+	],
+	_("Sales"): [
+		"Sales User",
+		"Stock User",
+		"Sales Manager",
+	],
+	_("Purchase"): [
+		"Item Manager",
+		"Stock User",
+		"Purchase User",
+		"Purchase Manager",
+	],
+}
+
+
+def grant_address_read_to_accounts_manager():
+	from frappe.permissions import add_permission, get_all_perms, update_permission_property
+
+	if not frappe.db.exists("Role", "Accounts Manager"):
+		return
+
+	has_rule = False
+	for perm in get_all_perms("Accounts Manager"):
+		if perm.parent == "Address":
+			has_rule = True
+	if has_rule or "Accounts Manager" in get_changed_roles("Address"):
+		print("Address / Accounts Manager: kept, this site already rules on this pair")
+		return
+
+	add_permission("Address", "Accounts Manager", 0, "read")
+	update_permission_property("Address", "Accounts Manager", 0, "export", 0)
+	frappe.clear_cache(doctype="Address")
+	print("Address / Accounts Manager: added read")
+
+
+def get_changed_roles(doctype: str, statuses: tuple = ("Updated", "Removed")) -> set:
+	if not frappe.db.exists("DocType", "Permission Log"):
+		return set()
+
+	logs = frappe.get_all(
+		"Permission Log",
+		filters={
+			"for_doctype": "DocType",
+			"for_document": doctype,
+			"reference_type": "Custom DocPerm",
+			"status": ["in", list(statuses)],
+		},
+		fields=["changes", "reference"],
+	)
+	roles = set()
+	for log in logs:
+		try:
+			changes = json.loads(log.changes) or {}
+		except (TypeError, ValueError):
+			changes = {}
+		logged = set()
+		for side in ("from", "to"):
+			role = (changes.get(side) or {}).get("role")
+			if role:
+				logged.add(role)
+		if not logged:
+			role = frappe.db.get_value("Custom DocPerm", log.reference, "role")
+			if role:
+				logged.add(role)
+		roles.update(logged)
+	return roles

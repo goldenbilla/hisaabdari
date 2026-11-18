@@ -1,0 +1,722 @@
+{
+ "actions": [],
+ "allow_events_in_timeline": 1,
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2013-06-11 14:26:44",
+ "description": "A company or person you sell goods or services to.",
+ "doctype": "DocType",
+ "document_type": "Setup",
+ "documentation": "https://docs.frappe.io/erpnext/user/manual/en/customer",
+ "engine": "InnoDB",
+ "field_order": [
+  "overview_tab",
+  "overview_html",
+  "details_tab",
+  "basic_info",
+  "naming_series",
+  "customer_name",
+  "customer_type",
+  "alias",
+  "gender",
+  "column_break0",
+  "customer_group",
+  "image",
+  "section_break_hwkr",
+  "default_currency",
+  "default_bank_account",
+  "column_break_yvyu",
+  "default_price_list",
+  "payment_terms",
+  "contact_and_address_tab",
+  "address_contacts",
+  "address_html",
+  "column_break1",
+  "contact_html",
+  "primary_address_and_contact_detail",
+  "column_break_26",
+  "customer_primary_address",
+  "primary_address",
+  "column_break_nwor",
+  "customer_primary_contact",
+  "mobile_no",
+  "email_id",
+  "first_name",
+  "last_name",
+  "accounting_tab",
+  "default_receivable_accounts",
+  "default_accounts_column",
+  "accounts",
+  "credit_limit_section",
+  "credit_limit_column",
+  "credit_limits",
+  "internal_customer_section",
+  "is_internal_customer",
+  "represents_company",
+  "section_break_nrvh",
+  "companies",
+  "tax_tab",
+  "taxation_section",
+  "tax_id",
+  "column_break_21",
+  "settings_tab",
+  "company_restrictions_section",
+  "restrict_to_companies",
+  "allowed_companies",
+  "section_break_ario",
+  "so_required",
+  "dn_required",
+  "column_break_53",
+  "disabled",
+  "is_frozen",
+  "block_customer_section",
+  "on_hold",
+  "release_date",
+  "sales_team_tab",
+  "account_manager",
+  "more_info_tab",
+  "section_break_objq",
+  "website",
+  "language",
+  "column_break_hdmn",
+  "customer_details",
+  "supplier_numbers_section",
+  "supplier_numbers_column",
+  "supplier_numbers",
+  "connections_tab"
+ ],
+ "fields": [
+  {
+   "depends_on": "eval: !doc.__islocal",
+   "fieldname": "overview_tab",
+   "fieldtype": "Tab Break",
+   "label": "Overview"
+  },
+  {
+   "fieldname": "overview_html",
+   "fieldtype": "HTML",
+   "label": "Overview HTML"
+  },
+  {
+   "fieldname": "details_tab",
+   "fieldtype": "Tab Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "basic_info",
+   "fieldtype": "Section Break",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-user"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "no_copy": 1,
+   "options": "CUST-.YYYY.-",
+   "set_only_once": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "label": "Customer Name",
+   "no_copy": 1,
+   "oldfieldname": "customer_name",
+   "oldfieldtype": "Data",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "alias",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "label": "Alias",
+   "no_copy": 1,
+   "unique": 1
+  },
+  {
+   "depends_on": "eval:doc.customer_type == 'Individual'",
+   "fieldname": "gender",
+   "fieldtype": "Link",
+   "label": "Gender",
+   "options": "Gender"
+  },
+  {
+   "default": "Company",
+   "fieldname": "customer_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Customer Type",
+   "oldfieldname": "customer_type",
+   "oldfieldtype": "Select",
+   "options": "Company\nIndividual\nPartnership",
+   "reqd": 1
+  },
+  {
+   "description": "Pre-filled on payment entries for this customer. Must be a company account.",
+   "fieldname": "default_bank_account",
+   "fieldtype": "Link",
+   "label": "Company Bank Account",
+   "options": "Bank Account",
+   "show_description_on_click": 1
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "hidden": 1,
+   "label": "Image",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "column_break0",
+   "fieldtype": "Column Break",
+   "width": "50%"
+  },
+  {
+   "fieldname": "account_manager",
+   "fieldtype": "Link",
+   "label": "Account Manager",
+   "options": "User"
+  },
+  {
+   "fieldname": "customer_group",
+   "fieldtype": "Link",
+   "in_import_template": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer Group",
+   "link_filters": "[[\"Customer Group\", \"is_group\", \"=\", 0]]",
+   "oldfieldname": "customer_group",
+   "oldfieldtype": "Link",
+   "options": "Customer Group",
+   "search_index": 1
+  },
+  {
+   "fieldname": "tax_id",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_import_template": 1,
+   "label": "Tax ID"
+  },
+  {
+   "default": "0",
+   "description": "Blocks this customer from being used on any new transaction.",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled",
+   "show_description_on_click": 1
+  },
+  {
+   "default": "0",
+   "description": "Mark if this customer represents an internal company. Enables inter-company transactions.",
+   "fieldname": "is_internal_customer",
+   "fieldtype": "Check",
+   "label": "Is Internal Customer"
+  },
+  {
+   "depends_on": "is_internal_customer",
+   "fieldname": "represents_company",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Represents Company",
+   "options": "Company",
+   "unique": 1
+  },
+  {
+   "depends_on": "eval: doc.is_internal_customer && doc.represents_company",
+   "fieldname": "companies",
+   "fieldtype": "Table",
+   "label": "Allowed to transact with",
+   "options": "Allowed To Transact With"
+  },
+  {
+   "description": "All invoices and orders for this customer will be created in this currency.",
+   "fieldname": "default_currency",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "in_import_template": 1,
+   "in_list_view": 1,
+   "label": "Billing Currency",
+   "no_copy": 1,
+   "options": "Currency",
+   "show_description_on_click": 1
+  },
+  {
+   "description": "Fetched automatically on sales orders and invoices for this customer.",
+   "fieldname": "default_price_list",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "in_import_template": 1,
+   "label": "Price List",
+   "link_filters": "[[\"Price List\", \"selling\", \"=\", 1]]",
+   "options": "Price List",
+   "show_description_on_click": 1
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Link",
+   "label": "Print Language",
+   "options": "Language"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "fieldname": "address_contacts",
+   "fieldtype": "Section Break",
+   "options": "fa fa-map-marker"
+  },
+  {
+   "depends_on": "eval: !doc.__islocal",
+   "fieldname": "address_html",
+   "fieldtype": "HTML",
+   "label": "Address HTML",
+   "read_only": 1
+  },
+  {
+   "fieldname": "website",
+   "fieldtype": "Data",
+   "label": "Website"
+  },
+  {
+   "fieldname": "column_break1",
+   "fieldtype": "Column Break",
+   "width": "50%"
+  },
+  {
+   "depends_on": "eval: !doc.__islocal",
+   "fieldname": "contact_html",
+   "fieldtype": "HTML",
+   "label": "Contact HTML",
+   "oldfieldtype": "HTML",
+   "read_only": 1
+  },
+  {
+   "description": "Select, to make the customer searchable with these fields",
+   "fieldname": "primary_address_and_contact_detail",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "Primary Address and Contact"
+  },
+  {
+   "description": "Reselect, if the chosen contact is edited after save",
+   "fieldname": "customer_primary_contact",
+   "fieldtype": "Link",
+   "label": "Customer Primary Contact",
+   "no_copy": 1,
+   "options": "Contact"
+  },
+  {
+   "fetch_from": "customer_primary_contact.mobile_no",
+   "fieldname": "mobile_no",
+   "fieldtype": "Read Only",
+   "hidden": 1,
+   "in_global_search": 1,
+   "label": "Mobile No",
+   "no_copy": 1,
+   "options": "Mobile"
+  },
+  {
+   "fetch_from": "customer_primary_contact.email_id",
+   "fieldname": "email_id",
+   "fieldtype": "Read Only",
+   "hidden": 1,
+   "in_global_search": 1,
+   "label": "Email Id",
+   "no_copy": 1,
+   "options": "Email"
+  },
+  {
+   "fieldname": "column_break_26",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Reselect, if the chosen address is edited after save",
+   "fieldname": "customer_primary_address",
+   "fieldtype": "Link",
+   "label": "Customer Primary Address",
+   "no_copy": 1,
+   "options": "Address"
+  },
+  {
+   "fieldname": "primary_address",
+   "fieldtype": "Text Editor",
+   "hidden": 1,
+   "label": "Primary Address",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "default_receivable_accounts",
+   "fieldtype": "Section Break"
+  },
+  {
+   "description": "If set, accounting entries for this customer will post to these accounts instead of the company default.",
+   "fieldname": "accounts",
+   "fieldtype": "Table",
+   "label": "Default Accounts",
+   "options": "Party Account",
+   "show_description_on_click": 1
+  },
+  {
+   "fieldname": "credit_limit_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "description": "Defines when payment is due (e.g. Net 30, 50% advance). Applied automatically on invoices for this customer.",
+   "fieldname": "payment_terms",
+   "fieldtype": "Link",
+   "in_import_template": 1,
+   "label": "Payment Terms Template",
+   "options": "Payment Terms Template",
+   "show_description_on_click": 1
+  },
+  {
+   "description": "Internal notes about this customer. Not visible on transactions or the portal.",
+   "fieldname": "customer_details",
+   "fieldtype": "Text",
+   "label": "Customer Details",
+   "oldfieldname": "customer_details",
+   "oldfieldtype": "Code"
+  },
+  {
+   "default": "0",
+   "description": "Blocks new transactions and further accounting entries on this customer's account. Only users with the role set in Company's \"Roles Allowed to Set and Edit Frozen Account Entries\" can transact.",
+   "fieldname": "is_frozen",
+   "fieldtype": "Check",
+   "label": "Is Frozen",
+   "show_description_on_click": 1
+  },
+  {
+   "fieldname": "block_customer_section",
+   "fieldtype": "Section Break",
+   "label": "Block Customer"
+  },
+  {
+   "default": "0",
+   "description": "Blocks saving or submitting Sales Orders, Delivery Notes, Sales Invoices and POS Invoices for this customer.",
+   "fieldname": "on_hold",
+   "fieldtype": "Check",
+   "label": "Block Customer",
+   "show_description_on_click": 1
+  },
+  {
+   "depends_on": "eval:doc.on_hold",
+   "description": "Leave blank if the Customer is blocked indefinitely",
+   "fieldname": "release_date",
+   "fieldtype": "Date",
+   "label": "Release Date"
+  },
+  {
+   "description": "Transactions are blocked when the outstanding balance exceeds the credit limit. When Restrict Customer Over Billing is enabled, new invoices are also blocked when the customer's overdue amount exceeds the Overdue Limit.",
+   "fieldname": "credit_limits",
+   "fieldtype": "Table",
+   "label": "Credit & Overdue Limits",
+   "options": "Customer Credit Limit",
+   "show_description_on_click": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "so_required",
+   "fieldtype": "Check",
+   "label": "Allow sales invoice creation without sales order"
+  },
+  {
+   "default": "0",
+   "fieldname": "dn_required",
+   "fieldtype": "Check",
+   "label": "Allow sales invoice creation without delivery note"
+  },
+  {
+   "fieldname": "contact_and_address_tab",
+   "fieldtype": "Tab Break",
+   "label": "Address & Contact"
+  },
+  {
+   "fieldname": "settings_tab",
+   "fieldtype": "Tab Break",
+   "label": "Settings"
+  },
+  {
+   "fieldname": "company_restrictions_section",
+   "fieldtype": "Section Break",
+   "label": "Company Restrictions",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "description": "If checked, this Customer is only available for transactions in the companies listed below.",
+   "fieldname": "restrict_to_companies",
+   "fieldtype": "Check",
+   "label": "Restrict to Companies",
+   "permlevel": 1
+  },
+  {
+   "depends_on": "eval:doc.restrict_to_companies",
+   "fieldname": "allowed_companies",
+   "fieldtype": "Table MultiSelect",
+   "label": "Allowed Companies",
+   "mandatory_depends_on": "eval:doc.restrict_to_companies",
+   "options": "Company Restriction",
+   "permlevel": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "sales_team_tab",
+   "fieldtype": "Tab Break",
+   "label": "Sales Team",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-group"
+  },
+  {
+   "fieldname": "column_break_21",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_53",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "taxation_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "accounting_tab",
+   "fieldtype": "Tab Break",
+   "label": "Accounting"
+  },
+  {
+   "fieldname": "tax_tab",
+   "fieldtype": "Tab Break",
+   "label": "Tax"
+  },
+  {
+   "fieldname": "internal_customer_section",
+   "fieldtype": "Section Break",
+   "hide_border": 1,
+   "label": "Internal Customer Accounting"
+  },
+  {
+   "fieldname": "column_break_nwor",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "customer_primary_contact.first_name",
+   "fieldname": "first_name",
+   "fieldtype": "Read Only",
+   "hidden": 1,
+   "label": "First Name",
+   "no_copy": 1
+  },
+  {
+   "fetch_from": "customer_primary_contact.last_name",
+   "fieldname": "last_name",
+   "fieldtype": "Read Only",
+   "hidden": 1,
+   "label": "Last Name",
+   "no_copy": 1
+  },
+  {
+   "description": "Numbers this customer uses to identify your company in their own system.",
+   "fieldname": "supplier_numbers",
+   "fieldtype": "Table",
+   "label": "Supplier Numbers",
+   "options": "Supplier Number At Customer"
+  },
+  {
+   "fieldname": "more_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "More Info"
+  },
+  {
+   "fieldname": "section_break_objq",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_hdmn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connections_tab",
+   "fieldtype": "Tab Break",
+   "label": "Connections",
+   "show_dashboard": 1
+  },
+  {
+   "fieldname": "supplier_numbers_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "section_break_hwkr",
+   "fieldtype": "Section Break",
+   "label": "Defaults"
+  },
+  {
+   "fieldname": "column_break_yvyu",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_accounts_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "supplier_numbers_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_nrvh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "credit_limit_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_ario",
+   "fieldtype": "Section Break"
+  }
+ ],
+ "icon": "user-round",
+ "idx": 363,
+ "image_field": "image",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-30 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Selling",
+ "name": "Customer",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "import": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Master Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Sales Master Manager",
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User"
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager"
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User"
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Delivery Manager",
+   "select": 1
+  },
+  {
+   "role": "Delivery User",
+   "select": 1
+  },
+  {
+   "role": "Employee",
+   "select": 1
+  },
+  {
+   "role": "Fulfillment User",
+   "select": 1
+  },
+  {
+   "role": "HR Manager",
+   "select": 1
+  },
+  {
+   "role": "HR User",
+   "select": 1
+  },
+  {
+   "role": "Maintenance Manager",
+   "select": 1
+  },
+  {
+   "role": "Maintenance User",
+   "select": 1
+  },
+  {
+   "role": "Projects Manager",
+   "select": 1
+  },
+  {
+   "role": "Projects User",
+   "select": 1
+  },
+  {
+   "role": "Purchase Master Manager",
+   "select": 1
+  },
+  {
+   "role": "Quality Manager",
+   "select": 1
+  },
+  {
+   "role": "Support Team",
+   "select": 1
+  },
+  {
+   "role": "Website Manager",
+   "select": 1
+  }
+ ],
+ "quick_entry": 1,
+ "row_format": "Dynamic",
+ "search_fields": "customer_group, mobile_no,primary_address, alias",
+ "show_name_in_global_search": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "customer_name",
+ "track_changes": 1
+}

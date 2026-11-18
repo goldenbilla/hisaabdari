@@ -1,0 +1,55 @@
+{
+ "app": "hisaabdari",
+ "creation": "2026-08-26 23:30:00",
+ "docstatus": 0,
+ "doctype": "Dock",
+ "idx": 0,
+ "items": [
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "sliders-soft",
+   "link_to": "Setup",
+   "link_type": "Sidebar",
+   "title": "Setup"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "calculator-soft",
+   "link_to": "Accounts",
+   "link_type": "Sidebar",
+   "title": "Accounts"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "storefront-soft",
+   "link_to": "Selling",
+   "link_type": "Sidebar",
+   "title": "Selling"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "shopping-cart-soft",
+   "link_to": "Buying",
+   "link_type": "Sidebar",
+   "title": "Buying"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "shelf-rack-soft",
+   "link_to": "Stock",
+   "link_type": "Sidebar",
+   "title": "Stock"
+  }
+ ],
+ "modified": "2026-10-08 19:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "hisaabdari",
+ "owner": "Administrator",
+ "standard": 1,
+ "user": ""
+}
