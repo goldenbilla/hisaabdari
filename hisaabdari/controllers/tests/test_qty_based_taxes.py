@@ -59,7 +59,6 @@ class TestTaxes(ERPNextTestSuite):
 				"taxes": [
 					{
 						"item_tax_template": self.item_tax_template.name,
-						"tax_category": "",
 					}
 				],
 			}
@@ -116,7 +115,7 @@ class TestTaxes(ERPNextTestSuite):
 							"charge_type": "On Item Quantity",
 							"account_head": self.account.name,
 							"description": "N/A",
-							"rate": 0,
+							"rate": 2,
 						},
 					],
 				}

@@ -1,7 +1,6 @@
 # Copyright (c) 2022, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-
 from unittest.mock import patch
 
 import frappe
@@ -22,7 +21,6 @@ from hisaabdari.buying.doctype.purchase_order.test_purchase_order import (
 	prepare_data_for_internal_transfer,
 )
 from hisaabdari.controllers.accounts_controller import get_payment_term_details, get_payment_terms
-from hisaabdari.projects.doctype.project.test_project import make_project
 from hisaabdari.tests.permission_test_utils import (
 	as_user,
 	assert_refused_for_names,
@@ -30,6 +28,25 @@ from hisaabdari.tests.permission_test_utils import (
 	make_fenced_user,
 )
 from hisaabdari.tests.utils import ERPNextTestSuite
+
+
+def make_address(**args):
+	args = frappe._dict(args)
+
+	address_doc = frappe.get_doc(
+		{
+			"doctype": "Address",
+			"address_title": args.address_title or "Address Title",
+			"address_type": args.address_type or "Billing",
+			"city": args.city or "Mumbai",
+			"address_line1": args.address_line1 or "Vidya Vihar West",
+			"country": args.country or "India",
+		}
+	)
+
+	address_doc.insert()
+
+	return address_doc
 
 
 class TestAccountsController(ERPNextTestSuite):
@@ -65,7 +82,6 @@ class TestAccountsController(ERPNextTestSuite):
 		self.customer = "_Test Customer USD"
 		self.supplier = "_Test Supplier USD"
 		self.create_account()
-		frappe.flags.is_reverse_depr_entry = False
 
 	def create_account(self):
 		# Advance accounts are not in persistent test data — create them on demand.
@@ -178,7 +194,6 @@ class TestAccountsController(ERPNextTestSuite):
 			update_stock=0,
 			currency="USD",
 			conversion_rate=conversion_rate,
-			is_pos=0,
 			is_return=0,
 			return_against=None,
 			income_account=self.income_account,
@@ -240,7 +255,6 @@ class TestAccountsController(ERPNextTestSuite):
 			update_stock=0,
 			currency="USD",
 			conversion_rate=conversion_rate,
-			is_pos=0,
 			is_return=0,
 			income_account=self.income_account,
 			expense_account=self.expense_account,
@@ -1582,203 +1596,6 @@ class TestAccountsController(ERPNextTestSuite):
 
 		frappe.db.set_value("Company", self.company, "cost_center", cc)
 
-	def test_90_dimensions_filter(self):
-		"""
-		Test workings of dimension filters
-		"""
-		rate_in_account_currency = 1
-
-		# Invoices
-		si1 = self.create_sales_invoice(qty=1, rate=rate_in_account_currency, do_not_submit=True)
-		si1.department = "Management - _TC"
-		si1.save().submit()
-
-		si2 = self.create_sales_invoice(qty=1, rate=rate_in_account_currency, do_not_submit=True)
-		si2.department = "Operations - _TC"
-		si2.save().submit()
-
-		# Payments
-		cr_note1 = self.create_sales_invoice(qty=-1, conversion_rate=75, rate=1, do_not_save=True)
-		cr_note1.department = "Management - _TC"
-		cr_note1.is_return = 1
-		cr_note1.save().submit()
-
-		cr_note2 = self.create_sales_invoice(qty=-1, conversion_rate=75, rate=1, do_not_save=True)
-		cr_note2.department = "Legal - _TC"
-		cr_note2.is_return = 1
-		cr_note2.save().submit()
-
-		pe1 = get_payment_entry(si1.doctype, si1.name)
-		pe1.references = []
-		pe1.department = "Research & Development - _TC"
-		pe1.save().submit()
-
-		pe2 = get_payment_entry(si1.doctype, si1.name)
-		pe2.references = []
-		pe2.department = "Management - _TC"
-		pe2.save().submit()
-
-		je1 = self.create_journal_entry(
-			acc1=self.debit_usd,
-			acc1_exc_rate=75,
-			acc2=self.cash,
-			acc1_amount=-1,
-			acc2_amount=-75,
-			acc2_exc_rate=1,
-		)
-		je1.accounts[0].party_type = "Customer"
-		je1.accounts[0].party = self.customer
-		je1.accounts[0].department = "Management - _TC"
-		je1.save().submit()
-
-		# assert dimension filter's result
-		pr = self.create_payment_reconciliation()
-		pr.get_unreconciled_entries()
-		self.assertEqual(len(pr.invoices), 2)
-		self.assertEqual(len(pr.payments), 5)
-
-		pr.department = "Legal - _TC"
-		pr.get_unreconciled_entries()
-		self.assertEqual(len(pr.invoices), 0)
-		self.assertEqual(len(pr.payments), 1)
-
-		pr.department = "Management - _TC"
-		pr.get_unreconciled_entries()
-		self.assertEqual(len(pr.invoices), 1)
-		self.assertEqual(len(pr.payments), 3)
-
-		pr.department = "Research & Development - _TC"
-		pr.get_unreconciled_entries()
-		self.assertEqual(len(pr.invoices), 0)
-		self.assertEqual(len(pr.payments), 1)
-
-	def test_91_cr_note_should_inherit_dimension(self):
-		rate_in_account_currency = 1
-
-		# Invoice
-		si = self.create_sales_invoice(qty=1, rate=rate_in_account_currency, do_not_submit=True)
-		si.department = "Management - _TC"
-		si.save().submit()
-
-		# Payment
-		cr_note = self.create_sales_invoice(qty=-1, conversion_rate=75, rate=1, do_not_save=True)
-		cr_note.department = "Management - _TC"
-		cr_note.is_return = 1
-		cr_note.save().submit()
-
-		pr = self.create_payment_reconciliation()
-		pr.department = "Management - _TC"
-		pr.get_unreconciled_entries()
-		self.assertEqual(len(pr.invoices), 1)
-		self.assertEqual(len(pr.payments), 1)
-		invoices = [x.as_dict() for x in pr.invoices]
-		payments = [x.as_dict() for x in pr.payments]
-		pr.allocate_entries(frappe._dict({"invoices": invoices, "payments": payments}))
-		pr.reconcile()
-		self.assertEqual(len(pr.invoices), 0)
-		self.assertEqual(len(pr.payments), 0)
-
-		# There should be 2 journals, JE(Cr Note) and JE(Exchange Gain/Loss)
-		exc_je_for_si = self.get_journals_for(si.doctype, si.name)
-		exc_je_for_cr_note = self.get_journals_for(cr_note.doctype, cr_note.name)
-		self.assertNotEqual(exc_je_for_si, [])
-		self.assertEqual(len(exc_je_for_si), 1)
-		self.assertEqual(len(exc_je_for_cr_note), 2)
-		self.assertCountEqual(
-			exc_je_for_cr_note,
-			exc_je_for_si + self.get_journals_for("Journal Entry", exc_je_for_si[0].parent),
-		)
-
-		for x in exc_je_for_si + exc_je_for_cr_note:
-			with self.subTest(x=x):
-				self.assertEqual(
-					[cr_note.department, cr_note.department],
-					frappe.db.get_all(
-						"Journal Entry Account", filters={"parent": x.parent}, pluck="department"
-					),
-				)
-
-	def test_92_dimension_inhertiance_exc_gain_loss(self):
-		# Sales Invoice in Foreign Currency
-		rate_in_account_currency = 1
-		dpt = "Research & Development - _TC"
-
-		si = self.create_sales_invoice(qty=1, rate=rate_in_account_currency, do_not_save=True)
-		si.department = dpt
-		si.save().submit()
-
-		pe = self.create_payment_entry(amount=1, source_exc_rate=82).save()
-		pe.department = dpt
-		pe = pe.save().submit()
-
-		pr = self.create_payment_reconciliation()
-		pr.department = dpt
-		pr.get_unreconciled_entries()
-		self.assertEqual(len(pr.invoices), 1)
-		self.assertEqual(len(pr.payments), 1)
-		invoices = [x.as_dict() for x in pr.invoices]
-		payments = [x.as_dict() for x in pr.payments]
-		pr.allocate_entries(frappe._dict({"invoices": invoices, "payments": payments}))
-		pr.reconcile()
-		self.assertEqual(len(pr.invoices), 0)
-		self.assertEqual(len(pr.payments), 0)
-
-		# Exc Gain/Loss journals should inherit dimension from parent
-		journals = self.get_journals_for(si.doctype, si.name)
-		self.assertEqual(
-			[dpt, dpt],
-			frappe.db.get_all(
-				"Journal Entry Account",
-				filters={"parent": ("in", [x.parent for x in journals])},
-				pluck="department",
-			),
-		)
-
-	def test_93_dimension_inheritance_on_advance(self):
-		dpt = "Research & Development - _TC"
-
-		adv = self.create_payment_entry(amount=1, source_exc_rate=85)
-		adv.department = dpt
-		adv.save().submit()
-		adv.reload()
-
-		# Sales Invoices in different exchange rates
-		si = self.create_sales_invoice(qty=1, conversion_rate=82, rate=1, do_not_submit=True)
-		si.department = dpt
-		advances = si.get_advance_entries()
-		self.assertEqual(len(advances), 1)
-		self.assertEqual(advances[0].reference_name, adv.name)
-		si.append(
-			"advances",
-			{
-				"doctype": "Sales Invoice Advance",
-				"reference_type": advances[0].reference_type,
-				"reference_name": advances[0].reference_name,
-				"reference_row": advances[0].reference_row,
-				"advance_amount": 1,
-				"allocated_amount": 1,
-				"ref_exchange_rate": advances[0].exchange_rate,
-				"remarks": advances[0].remarks,
-			},
-		)
-		si = si.save().submit()
-
-		# Outstanding in both currencies should be '0'
-		adv.reload()
-		self.assertEqual(si.outstanding_amount, 0)
-		self.assert_ledger_outstanding(si.doctype, si.name, 0.0, 0.0)
-
-		# Exc Gain/Loss journals should inherit dimension from parent
-		journals = self.get_journals_for(si.doctype, si.name)
-		self.assertEqual(
-			[dpt, dpt],
-			frappe.db.get_all(
-				"Journal Entry Account",
-				filters={"parent": ("in", [x.parent for x in journals])},
-				pluck="department",
-			),
-		)
-
 	def test_50_journal_against_journal(self):
 		# Invoice in Foreign Currency
 		journal_as_invoice = self.create_journal_entry(
@@ -2194,19 +2011,7 @@ class TestAccountsController(ERPNextTestSuite):
 		purchase_invoice = frappe.get_doc("Purchase Invoice", pi.name)
 		self.assertEqual(purchase_invoice.advances[0].difference_posting_date, journal_voucher.posting_date)
 
-	def test_company_validation_in_dimension(self):
-		si = create_sales_invoice(do_not_submit=True)
-		project = make_project({"project_name": "_Test Demo Project1", "company": "_Test Company 1"})
-		si.project = project.name
-		self.assertRaises(frappe.ValidationError, si.save)
-
-		si_1 = create_sales_invoice(do_not_submit=True)
-		si_1.items[0].project = project.name
-		self.assertRaises(frappe.ValidationError, si_1.save)
-
 	def test_party_billing_and_shipping_address(self):
-		from hisaabdari.crm.doctype.prospect.test_prospect import make_address
-
 		customer_billing = make_address(address_title="Customer")
 		customer_billing.append("links", {"link_doctype": "Customer", "link_name": "_Test Customer"})
 		customer_billing.save()
@@ -2431,7 +2236,6 @@ class TestAccountsController(ERPNextTestSuite):
 		self.assertEqual(return_si_2.discount_amount, -40)
 
 	def test_company_linked_address(self):
-		from hisaabdari.crm.doctype.prospect.test_prospect import make_address
 		from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
 
 		company_address = make_address(

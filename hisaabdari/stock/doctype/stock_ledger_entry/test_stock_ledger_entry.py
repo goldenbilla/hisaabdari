@@ -15,9 +15,6 @@ from frappe.utils import add_days, add_to_date, flt, today
 from hisaabdari.accounts.doctype.gl_entry.gl_entry import rename_gle_sle_docs
 from hisaabdari.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
 from hisaabdari.stock.doctype.item.test_item import make_item
-from hisaabdari.stock.doctype.landed_cost_voucher.test_landed_cost_voucher import (
-	create_landed_cost_voucher,
-)
 from hisaabdari.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 from hisaabdari.stock.doctype.serial_and_batch_bundle.test_serial_and_batch_bundle import (
 	make_serial_batch_bundle,
@@ -224,17 +221,6 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 		self.assertEqual(outgoing_rate, 100)
 		self.assertEqual(stock_value_difference, -200)
 
-		create_landed_cost_voucher("Purchase Receipt", pr.name, pr.company)
-
-		outgoing_rate, stock_value_difference = frappe.db.get_value(
-			"Stock Ledger Entry",
-			{"voucher_type": "Purchase Receipt", "voucher_no": return_pr.name},
-			["outgoing_rate", "stock_value_difference"],
-		)
-
-		self.assertEqual(outgoing_rate, 110)
-		self.assertEqual(stock_value_difference, -220)
-
 	def test_sales_return_valuation_reposting(self):
 		company = "_Test Company"
 		item_code = "_Test Item for Reposting"
@@ -297,146 +283,10 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 		self.assertEqual(incoming_rate, 100)
 		self.assertEqual(stock_value_difference, 200)
 
-		# -------------------------------
-
-		# Landed Cost Voucher to update the rate of incoming Purchase Return: Additional cost = 50
-		lcv = create_landed_cost_voucher("Purchase Receipt", pr.name, pr.company)
-
-		# check outgoing_rate for DN after reposting
-		outgoing_rate = abs(
-			frappe.db.get_value(
-				"Stock Ledger Entry",
-				{"voucher_type": "Delivery Note", "voucher_no": dn.name},
-				"stock_value_difference",
-			)
-			/ 5
-		)
-		self.assertEqual(outgoing_rate, 110)
-
-		dn.reload()
-		self.assertEqual(dn.items[0].incoming_rate, 110)
-
-		# check incoming rate for Return entry after reposting
-		incoming_rate, stock_value_difference = frappe.db.get_value(
-			"Stock Ledger Entry",
-			{"voucher_type": "Delivery Note", "voucher_no": return_dn.name},
-			["incoming_rate", "stock_value_difference"],
-		)
-
-		self.assertEqual(incoming_rate, 110)
-		self.assertEqual(stock_value_difference, 220)
-
-		return_dn.reload()
-		self.assertEqual(return_dn.items[0].incoming_rate, 110)
-
 		# Cleanup data
 		return_dn.cancel()
 		dn.reload()
 		dn.cancel()
-		lcv.cancel()
-		pr.cancel()
-
-	def test_reposting_of_sales_return_for_packed_item(self):
-		company = "_Test Company"
-		packed_item_code = "_Test Item for Reposting"
-		bundled_item = "_Test Bundled Item for Reposting"
-		create_product_bundle_item(bundled_item, [[packed_item_code, 4]])
-
-		# Purchase Return: Qty = 50, Rate = 100
-		pr = make_purchase_receipt(
-			company=company,
-			posting_date="2020-04-10",
-			warehouse="Stores - _TC",
-			item_code=packed_item_code,
-			qty=50,
-			rate=100,
-		)
-
-		# Delivery Note: Qty = 5, Rate = 150
-		dn = create_delivery_note(
-			item_code=bundled_item,
-			qty=5,
-			rate=150,
-			warehouse="Stores - _TC",
-			company=company,
-			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
-		)
-
-		# check outgoing_rate for DN
-		outgoing_rate = abs(
-			frappe.db.get_value(
-				"Stock Ledger Entry",
-				{"voucher_type": "Delivery Note", "voucher_no": dn.name},
-				"stock_value_difference",
-			)
-			/ 20
-		)
-
-		self.assertEqual(dn.packed_items[0].incoming_rate, 100)
-		self.assertEqual(outgoing_rate, 100)
-
-		# Return Entry: Qty = -2, Rate = 150
-		return_dn = create_delivery_note(
-			is_return=1,
-			return_against=dn.name,
-			item_code=bundled_item,
-			qty=-2,
-			rate=150,
-			company=company,
-			warehouse="Stores - _TC",
-			expense_account="Cost of Goods Sold - _TC",
-			cost_center="Main - _TC",
-		)
-
-		# check incoming rate for Return entry
-		incoming_rate, stock_value_difference = frappe.db.get_value(
-			"Stock Ledger Entry",
-			{"voucher_type": "Delivery Note", "voucher_no": return_dn.name},
-			["incoming_rate", "stock_value_difference"],
-		)
-
-		self.assertEqual(return_dn.packed_items[0].incoming_rate, 100)
-		self.assertEqual(incoming_rate, 100)
-		self.assertEqual(stock_value_difference, 800)
-
-		# -------------------------------
-
-		# Landed Cost Voucher to update the rate of incoming Purchase Return: Additional cost = 50
-		lcv = create_landed_cost_voucher("Purchase Receipt", pr.name, pr.company)
-
-		# check outgoing_rate for DN after reposting
-		outgoing_rate = abs(
-			frappe.db.get_value(
-				"Stock Ledger Entry",
-				{"voucher_type": "Delivery Note", "voucher_no": dn.name},
-				"stock_value_difference",
-			)
-			/ 20
-		)
-		self.assertEqual(outgoing_rate, 101)
-
-		dn.reload()
-		self.assertEqual(dn.packed_items[0].incoming_rate, 101)
-
-		# check incoming rate for Return entry after reposting
-		incoming_rate, stock_value_difference = frappe.db.get_value(
-			"Stock Ledger Entry",
-			{"voucher_type": "Delivery Note", "voucher_no": return_dn.name},
-			["incoming_rate", "stock_value_difference"],
-		)
-
-		self.assertEqual(incoming_rate, 101)
-		self.assertEqual(stock_value_difference, 808)
-
-		return_dn.reload()
-		self.assertEqual(return_dn.packed_items[0].incoming_rate, 101)
-
-		# Cleanup data
-		return_dn.cancel()
-		dn.reload()
-		dn.cancel()
-		lcv.cancel()
 		pr.cancel()
 
 	def test_back_dated_entry_not_allowed(self):
@@ -1102,7 +952,7 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 
 		item = make_item().name
 		A = "Stores - TCP1"
-		B = "Work In Progress - TCP1"
+		B = "Goods In Transit - TCP1"
 		C = "Finished Goods - TCP1"
 
 		make_stock_entry(item_code=item, to_warehouse=A, qty=5, rate=10, posting_date=_day(0))
@@ -2146,14 +1996,14 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 		transfer.cancel()
 
 		new_transfer = make_stock_entry(
-			item_code=item, source="Stores - TCP1", target="Work In Progress - TCP1", qty=100
+			item_code=item, source="Stores - TCP1", target="Goods In Transit - TCP1", qty=100
 		)
 
 		self.assertSLEs(
 			new_transfer,
 			[
 				{"warehouse": "Stores - TCP1", "stock_value": 50, "stock_value_difference": -1000},
-				{"warehouse": "Work In Progress - TCP1", "stock_value": 1100, "stock_value_difference": 1000},
+				{"warehouse": "Goods In Transit - TCP1", "stock_value": 1100, "stock_value_difference": 1000},
 			],
 		)
 		self.assertFalse(frappe.get_all("GL Entry", {"voucher_no": new_transfer.name, "is_cancelled": 0}))
@@ -2164,7 +2014,7 @@ class TestStockLedgerEntry(ERPNextTestSuite, StockTestMixin):
 		transfer.cancel()
 
 		new_transfer = make_stock_entry(
-			item_code=item, source="Stores - TCP1", target="Work In Progress - TCP1", qty=100
+			item_code=item, source="Stores - TCP1", target="Goods In Transit - TCP1", qty=100
 		)
 
 		self.assertSLEs(
@@ -2210,7 +2060,7 @@ def make_transfer_with_later_receipts(valuation_method):
 	transfer = make_stock_entry(
 		item_code=item,
 		source="Stores - TCP1",
-		target="Work In Progress - TCP1",
+		target="Goods In Transit - TCP1",
 		qty=100,
 		posting_date=posting_date,
 		posting_time="07:00:00",
@@ -2225,7 +2075,7 @@ def make_transfer_with_later_receipts(valuation_method):
 	)
 	make_stock_entry(
 		item_code=item,
-		target="Work In Progress - TCP1",
+		target="Goods In Transit - TCP1",
 		qty=10,
 		rate=10,
 		posting_date=posting_date,
@@ -2281,17 +2131,6 @@ def create_repack_entry(**args):
 	return repack
 
 
-def create_product_bundle_item(new_item_code, packed_items):
-	if not frappe.db.exists("Product Bundle", new_item_code):
-		item = frappe.new_doc("Product Bundle")
-		item.new_item_code = new_item_code
-
-		for d in packed_items:
-			item.append("items", {"item_code": d[0], "qty": d[1]})
-
-		item.save()
-
-
 def create_items(items=None, uoms=None):
 	if not items:
 		items = [
@@ -2305,8 +2144,6 @@ def create_items(items=None, uoms=None):
 		properties = {"valuation_method": "FIFO"}
 		if d == "_Test Bundled Item for Reposting":
 			properties.update({"is_stock_item": 0})
-		elif d == "_Test Subcontracted Item for Reposting":
-			properties.update({"is_sub_contracted_item": 1})
 
 		make_item(d, properties=properties, uoms=uoms)
 

@@ -15,7 +15,6 @@ from hisaabdari.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle im
 	get_available_batches_qty,
 	get_available_serial_nos,
 	get_qty_based_available_batches,
-	get_reserved_serial_nos_for_pos,
 	get_serial_batch_ledgers,
 	get_serial_nos_based_on_posting_date,
 	get_type_of_transaction,
@@ -2418,15 +2417,6 @@ class TestSerialandBatchBundle(ERPNextTestSuite):
 		item.reload()
 		self.assertEqual(item.use_serial_no_wise_valuation, 1)
 
-	def test_get_picked_batches_runs(self):
-		from hisaabdari.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import get_picked_batches
-
-		# Sum(qty) is selected with bare batch_no/warehouse; without a GROUP BY this
-		# raises a GroupingError on Postgres (and collapses to one arbitrary row on
-		# MariaDB). It must run and return a per-(batch, warehouse) mapping on both.
-		result = get_picked_batches(frappe._dict())
-		self.assertIsInstance(result, dict)
-
 	def test_same_new_serial_on_two_rows_of_one_receipt_is_refused(self):
 		item_code = make_item(properties={"is_stock_item": 1, "has_serial_no": 1}).name
 		serial_no = f"{item_code}-SN1"
@@ -2998,56 +2988,6 @@ class TestSerialandBatchBundleLogic(ERPNextTestSuite):
 			self.assertEqual(flt(sle.stock_value_difference, 2), flt(sle.actual_qty * outgoing_rate, 2))
 
 		self.assertEqual(flt(sl_entries[-1].stock_value, 2), flt(balance_value, 2))
-
-	def test_pos_reservations_are_limited_to_requested_serial_nos(self):
-		module = "hisaabdari.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle"
-		rows = [
-			frappe._dict(
-				serial_and_batch_bundle="POS-Bundle-1",
-				parent_docname="POS-Sale-1",
-				child_docname="POS-Row-1",
-			),
-			frappe._dict(
-				serial_and_batch_bundle="POS-Bundle-2",
-				parent_docname="POS-Sale-2",
-				child_docname="POS-Row-2",
-			),
-		]
-		ledgers = [
-			frappe._dict(name="POS-Bundle-1", serial_no="POS-Requested"),
-			frappe._dict(name="POS-Bundle-2", serial_no="POS-Not-Requested"),
-		]
-		kwargs = frappe._dict(item_code="POS-Item", check_serial_nos=True, serial_nos=["POS-Requested"])
-		with (
-			patch("frappe.get_all", return_value=rows),
-			patch(f"{module}._get_serial_batch_ledgers", return_value=ledgers),
-			patch(
-				"hisaabdari.controllers.sales_and_purchase_return.get_returned_serial_nos", return_value=[]
-			) as returned_serial_nos,
-		):
-			self.assertEqual(get_reserved_serial_nos_for_pos(kwargs), ["POS-Requested"])
-
-		self.assertEqual(returned_serial_nos.call_count, 1)
-
-	def test_serial_validation_reads_only_requested_serial_nos(self):
-		warehouse = "_Test Warehouse - _TC"
-		item_code = make_item(properties={"has_serial_no": 1, "serial_no_series": "TEST-CHKSN-.#####"}).name
-		se = make_stock_entry(item_code=item_code, target=warehouse, qty=3, rate=100)
-		requested, reserved, _free = get_serial_nos_from_bundle(se.items[0].serial_and_batch_bundle)
-
-		def available(serial_nos):
-			kwargs = frappe._dict(
-				item_code=item_code, warehouse=warehouse, check_serial_nos=True, serial_nos=serial_nos
-			)
-			return [row.serial_no for row in get_available_serial_nos(kwargs)]
-
-		with patch(
-			"hisaabdari.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle.get_reserved_serial_nos_for_pos",
-			return_value=[reserved],
-		):
-			self.assertEqual(available([requested]), [requested])
-			self.assertEqual(available([reserved]), [])
-			self.assertEqual(available([requested, reserved]), [requested])
 
 
 UP_STOCK_USER = "test_sbb_up_stock_user@example.com"

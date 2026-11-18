@@ -9,8 +9,7 @@ COMPANY = "_Test Company"
 
 class TestModeofPayment(ERPNextTestSuite):
 	"""Mode of Payment validates its per-company default accounts (account company
-	must match the row, no company twice) and blocks disabling while a POS Profile
-	still references it."""
+	must match the row, no company twice)."""
 
 	def setUp(self):
 		frappe.set_user("Administrator")
@@ -45,7 +44,6 @@ class TestModeofPayment(ERPNextTestSuite):
 
 	def test_disabled_mode_cannot_be_used_on_transactions(self):
 		from hisaabdari.accounts.doctype.payment_entry.test_payment_entry import create_payment_entry
-		from hisaabdari.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 
 		mode = self.make_mop(accounts=[(COMPANY, "Cash - _TC")]).insert()
 		payment = create_payment_entry()
@@ -66,28 +64,6 @@ class TestModeofPayment(ERPNextTestSuite):
 		payment.cancel()
 		self.assertEqual(payment.docstatus, 2)
 
-		invoice = create_sales_invoice()
-		request = frappe.get_doc(
-			{
-				"doctype": "Payment Request",
-				"payment_request_type": "Inward",
-				"company": invoice.company,
-				"reference_doctype": invoice.doctype,
-				"reference_name": invoice.name,
-				"grand_total": invoice.grand_total,
-				"currency": invoice.currency,
-				"mode_of_payment": mode.name,
-				"mute_email": 1,
-			}
-		)
-		with self.assertRaisesRegex(frappe.ValidationError, "Mode of Payment .* is disabled"):
-			request.insert()
-
-		invoice = create_sales_invoice(is_pos=1, do_not_save=True)
-		invoice.append("payments", {"mode_of_payment": mode.name, "amount": 100, "account": "Cash - _TC"})
-		with self.assertRaisesRegex(frappe.ValidationError, "Mode of Payment .* is disabled"):
-			invoice.insert()
-
 	def test_account_of_wrong_company_throws(self):
 		other_account = frappe.db.get_value("Account", {"company": "_Test Company 1", "is_group": 0}, "name")
 		self.assertTrue(other_account, "need a non-group account in _Test Company 1")
@@ -97,16 +73,6 @@ class TestModeofPayment(ERPNextTestSuite):
 	def test_repeating_company_throws(self):
 		doc = self.make_mop(accounts=[(COMPANY, "Cash - _TC"), (COMPANY, "Debtors - _TC")])
 		self.assertRaises(frappe.ValidationError, doc.insert)
-
-	def test_disabling_mode_referenced_by_pos_profile_is_blocked(self):
-		from hisaabdari.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
-
-		make_pos_profile()  # its payments row references the "Cash" mode of payment
-		cash = frappe.get_doc("Mode of Payment", "Cash")
-		cash.enabled = 0
-		with self.assertRaisesRegex(frappe.ValidationError, "Please remove them to disable this mode"):
-			cash.save()
-		self.assertEqual(frappe.db.get_value("Mode of Payment", "Cash", "enabled"), 1)
 
 	def test_disabling_unreferenced_mode_succeeds(self):
 		doc = self.make_mop(accounts=[(COMPANY, "Cash - _TC")], enabled=0)

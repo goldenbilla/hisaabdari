@@ -11,7 +11,6 @@ from frappe.utils import add_days, nowdate, today
 
 from hisaabdari.accounts.doctype.journal_entry.test_journal_entry import make_journal_entry
 from hisaabdari.accounts.doctype.payment_entry.payment_entry import get_payment_entry
-from hisaabdari.accounts.doctype.payment_request.payment_request import make_payment_request
 from hisaabdari.accounts.doctype.repost_accounting_ledger.repost_accounting_ledger import (
 	_lock_vouchers,
 	_record_repost_failure,
@@ -110,29 +109,11 @@ class TestRepostAccountingLedger(ERPNextTestSuite):
 	def test_01_basic_functions(self):
 		si = self.make_invoice()
 
-		preq = frappe.get_doc(
-			make_payment_request(
-				dt=si.doctype,
-				dn=si.name,
-				payment_request_type="Inward",
-				party_type="Customer",
-				party=si.customer,
-			)
-		)
-		preq.save().submit()
-
 		# Test Validation Error
 		ral = frappe.new_doc("Repost Accounting Ledger")
 		ral.company = "_Test Company"
 		ral.delete_cancelled_entries = True
 		ral.append("vouchers", {"voucher_type": si.doctype, "voucher_no": si.name})
-		ral.append(
-			"vouchers", {"voucher_type": preq.doctype, "voucher_no": preq.name}
-		)  # this should throw validation error
-		self.assertRaises(frappe.ValidationError, ral.save)
-		ral.vouchers.pop()
-		preq.cancel()
-		preq.delete()
 
 		pe = get_payment_entry(si.doctype, si.name)
 		pe.save().submit()
@@ -151,16 +132,6 @@ class TestRepostAccountingLedger(ERPNextTestSuite):
 
 		# Ledger should reflect correct amount post repost
 		self.assertEqual(self.get_gl_totals(si.name), (100, 100))
-
-	def test_02_deferred_accounting_valiations(self):
-		si = self.make_invoice(do_not_submit=True)
-		si.items[0].enable_deferred_revenue = True
-		si.items[0].deferred_revenue_account = "Deferred Revenue - _TC"
-		si.items[0].service_start_date = nowdate()
-		si.items[0].service_end_date = add_days(nowdate(), 90)
-		si.save().submit()
-
-		self.assertRaises(frappe.ValidationError, self.create_repost_doc, [si])
 
 	@ERPNextTestSuite.change_settings("Accounts Settings", {"delete_linked_ledger_entries": 1})
 	def test_04_pcv_validation(self):

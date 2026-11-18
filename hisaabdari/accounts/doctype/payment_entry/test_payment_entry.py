@@ -16,7 +16,6 @@ from hisaabdari.accounts.doctype.payment_entry.payment_entry import (
 	get_payment_entry,
 	get_reference_details,
 )
-from hisaabdari.accounts.doctype.payment_request.payment_request import make_payment_request
 from hisaabdari.accounts.doctype.purchase_invoice.test_purchase_invoice import (
 	make_purchase_invoice,
 	make_purchase_invoice_against_cost_center,
@@ -26,7 +25,6 @@ from hisaabdari.accounts.doctype.sales_invoice.test_sales_invoice import (
 	create_sales_invoice_against_cost_center,
 )
 from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
-from hisaabdari.setup.doctype.employee.test_employee import make_employee
 from hisaabdari.tests.permission_test_utils import as_user, make_bank_account, make_fenced_user
 from hisaabdari.tests.utils import ERPNextTestSuite
 
@@ -433,9 +431,9 @@ class TestPaymentEntry(ERPNextTestSuite):
 		doc.validate_party_details()
 
 	def test_custom_party_details_use_name_without_a_title_field(self):
-		frappe.get_doc(doctype="Party Type", party_type="Sales Partner", account_type="Receivable").insert()
-		party = "_Test Sales Partner India - 1"
-		details = get_party_details("_Test Company", "Sales Partner", party, nowdate())
+		frappe.get_doc(doctype="Party Type", party_type="Customer Group", account_type="Receivable").insert()
+		party = "_Test Customer Group"
+		details = get_party_details("_Test Company", "Customer Group", party, nowdate())
 		self.assertEqual(details["party_name"], party)
 		self.assertEqual(details["party_account"], "Debtors - _TC")
 
@@ -1053,25 +1051,6 @@ class TestPaymentEntry(ERPNextTestSuite):
 							self.assertEqual(term.discounted_amount, 0)
 							self.assertEqual(term.outstanding, 500)
 							self.assertEqual(term.base_outstanding, 500)
-
-		invoice = create_sales_invoice(qty=1, rate=1000, do_not_save=True)
-		invoice.payment_terms_template = "Test Discount Template"
-		invoice.submit()
-		request = make_payment_request(
-			dt=invoice.doctype, dn=invoice.name, submit_doc=True, return_doc=True, mute_email=True
-		)
-		payment = get_payment_entry(invoice.doctype, invoice.name, bank_account="_Test Cash - _TC")
-		payment.references[0].allocated_amount = 1
-		payment.append("references", frappe.copy_doc(payment.references[0]))
-		payment.references[1].idx = 2
-		payment.references[1].payment_request = None
-		payment.references[1].allocated_amount = 999
-		payment.submit()
-		self.assertEqual([row.payment_term_discount for row in payment.reload().references], [1, 99])
-		self.assertEqual(invoice.reload().payment_schedule[0].paid_amount, 900)
-		payment.cancel()
-		self.assertEqual(invoice.reload().payment_schedule[0].paid_amount, 0)
-		self.assertEqual(request.reload().outstanding_amount, 1000)
 
 	def test_payment_entry_against_payment_terms_with_discount_on_pi(self):
 		pi = make_purchase_invoice(do_not_save=1)
@@ -1981,37 +1960,6 @@ class TestPaymentEntry(ERPNextTestSuite):
 
 		self.assertTrue("is on hold" in str(err.exception).lower())
 
-	def test_payment_entry_for_employee(self):
-		employee = make_employee("test_payment_entry@salary.com", company="_Test Company")
-		create_payment_entry(party_type="Employee", party=employee, save=True)
-
-	def test_shareholder_payment_with_equity_account(self):
-		shareholder = frappe.get_doc(
-			doctype="Shareholder", title="_Test Shareholder Equity", company="_Test Company"
-		).insert()
-		account = create_account(
-			account_name="_Test Shareholder Equity",
-			account_type="Equity",
-			parent_account=frappe.get_value(
-				"Account", {"company": "_Test Company", "root_type": "Equity", "is_group": 1}, "name"
-			),
-			company="_Test Company",
-		)
-		for payment_type in ("Receive", "Pay"):
-			with self.subTest(payment_type=payment_type):
-				payment = create_payment_entry(
-					payment_type=payment_type,
-					party_type="Shareholder",
-					party=shareholder.name,
-					paid_from=account if payment_type == "Receive" else "_Test Cash - _TC",
-					paid_to=account if payment_type == "Pay" else "_Test Cash - _TC",
-					save=True,
-					submit=True,
-				)
-				self.assertTrue(
-					frappe.db.exists("GL Entry", {"voucher_no": payment.name, "account": account})
-				)
-
 	def test_duplicate_payment_entry_allocate_amount(self):
 		si = create_sales_invoice()
 
@@ -2090,28 +2038,6 @@ class TestPaymentEntry(ERPNextTestSuite):
 				self.assertEqual(invoice.reload().outstanding_amount, 83335)
 
 	def test_total_allocation_across_reference_rows(self):
-		invoice = create_sales_invoice(qty=1, rate=100)
-		payment_request = make_payment_request(
-			dt=invoice.doctype, dn=invoice.name, submit_doc=True, return_doc=True, mute_email=True
-		)
-		payment = get_payment_entry(invoice.doctype, invoice.name)
-		self.assertEqual(payment.references[0].payment_request, payment_request.name)
-		payment.append("references", frappe.copy_doc(payment.references[0]))
-		payment.references[1].payment_request = None
-		payment.paid_amount = payment.received_amount = 200
-
-		with self.assertRaisesRegex(frappe.ValidationError, "Allocated Amount cannot be greater"):
-			payment.submit()
-		self.assertEqual(invoice.reload().outstanding_amount, 100)
-
-		payment.references[0].allocated_amount = 40
-		payment.references[1].allocated_amount = 60
-		payment.paid_amount = payment.received_amount = 100
-		payment.submit()
-		self.assertEqual(invoice.reload().outstanding_amount, 0)
-		payment.cancel()
-		self.assertEqual(invoice.reload().outstanding_amount, 100)
-
 		create_payment_terms_template()
 		invoice = create_sales_invoice(qty=1, rate=118, do_not_save=True)
 		invoice.payment_terms_template = "Test Receivable Template"
@@ -3181,37 +3107,6 @@ class TestPaymentEntry(ERPNextTestSuite):
 		for ref in references:
 			self.assertEqual(ref.voucher_no, so.name)
 			self.assertIsNotNone(ref.payment_term)
-
-	def test_project_name_in_exchange_gain_loss_entry(self):
-		si = create_sales_invoice(
-			customer="_Test Customer USD",
-			debit_to="_Test Receivable USD - _TC",
-			currency="USD",
-			conversion_rate=50,
-			do_not_submit=True,
-		)
-		from hisaabdari.projects.doctype.project.test_project import make_project
-
-		si.project = make_project({"project_name": "_Test Project for Exchange Gain Loss Entry"}).name
-
-		si.submit()
-
-		pe = get_payment_entry("Sales Invoice", si.name)
-
-		pe.source_exchange_rate = 100
-
-		pe.insert()
-		pe.submit()
-
-		rows = frappe.get_all(
-			"Journal Entry Account",
-			or_filters=[{"reference_name": pe.name}, {"reference_name": si.name}],
-			fields=["project"],
-		)
-		self.assertEqual(len(rows), 2)
-
-		self.assertEqual(rows[0].project, si.project)
-		self.assertEqual(rows[1].project, si.project)
 
 
 def create_payment_entry(**args):

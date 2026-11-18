@@ -42,5 +42,11 @@ Kinds of difference, in the order they were applied:
 9. **Exchange rates** come only from Currency Exchange records (the external rate fetch
    needed the removed Currency Exchange Settings).
 
+10. **Migration patches:** only version-16 patches that touch kept doctypes remain in
+    `patches.txt`. Older patches and patches for removed features were deleted. When an
+    existing ERPNext site is converted, its Patch Log entries must be renamed from
+    `erpnext.patches.` to `hisaabdari.patches.`, and any upstream version-16 patch the site
+    has not yet run must be reviewed by hand.
+
 To pick up an upstream fix: diff the baseline commit against the newer upstream commit for
 the files that still exist here, and port the relevant hunks by hand.

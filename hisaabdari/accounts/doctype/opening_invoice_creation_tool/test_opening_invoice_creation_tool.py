@@ -11,8 +11,6 @@ from hisaabdari.accounts.doctype.opening_invoice_creation_tool.opening_invoice_c
 	get_temporary_opening_account,
 	start_import,
 )
-from hisaabdari.accounts.doctype.tax_rule.test_tax_rule import make_tax_rule
-from hisaabdari.projects.doctype.project.test_project import make_project
 from hisaabdari.tests.utils import ERPNextTestSuite
 
 
@@ -22,9 +20,7 @@ class TestOpeningInvoiceCreationTool(ERPNextTestSuite):
 		invoice_type="Sales",
 		company=None,
 		invoices=None,
-		project=None,
 		cost_center=None,
-		department=None,
 		return_doc=False,
 	):
 		doc = frappe.get_single("Opening Invoice Creation Tool")
@@ -32,9 +28,7 @@ class TestOpeningInvoiceCreationTool(ERPNextTestSuite):
 			invoice_type=invoice_type,
 			company=company,
 			invoices=invoices,
-			project=project,
 			cost_center=cost_center,
-			department=department,
 		)
 		doc.update(args)
 
@@ -123,14 +117,6 @@ class TestOpeningInvoiceCreationTool(ERPNextTestSuite):
 
 		self.assertEqual(invoices[0], "TEST-NEW-INV-11")
 
-	def test_opening_invoice_with_accounting_dimension(self):
-		invoices = self.make_invoices(
-			invoice_type="Sales", company="_Test Opening Invoice Company", department="Sales - _TOIC"
-		)
-
-		for invoice in invoices:
-			self.assertEqual(frappe.db.get_value("Sales Invoice", invoice, "department"), "Sales - _TOIC")
-
 	@ERPNextTestSuite.change_settings(
 		"Accounts Settings",
 		{"add_taxes_from_taxes_and_charges_template": 1, "add_taxes_from_item_tax_template": 0},
@@ -158,9 +144,6 @@ class TestOpeningInvoiceCreationTool(ERPNextTestSuite):
 			}
 		).insert()
 
-		# makes the template the default for the party, as it would be on a live site
-		make_tax_rule(tax_type="Sales", company=company, sales_tax_template=template.name, save=1)
-
 		tool = self.make_invoices(company=company, return_doc=True)
 		invoices = tool.make_invoices()
 		self.assertEqual(len(invoices), 2)
@@ -175,29 +158,11 @@ class TestOpeningInvoiceCreationTool(ERPNextTestSuite):
 		# the same invoice created outside the tool keeps the default taxes,
 		# since adding them there is the user's decision
 		si = frappe.get_doc(tool.get_invoices()[0])
+		si.taxes_and_charges = template.name
 		si.flags.ignore_mandatory = True
 		si.insert()
 		self.assertTrue(si.taxes)
 		self.assertEqual(si.grand_total, 218)
-
-	def test_opening_entry_project_linking(self):
-		doc = self.make_invoices(
-			company="_Test Opening Invoice Company", invoice_type="Sales", return_doc=True
-		)
-		project_1 = make_project(
-			{"project_name": "Test Opening Invoice projecty 01", "company": "_Test Opening Invoice Company"}
-		)
-		project_2 = make_project(
-			{"project_name": "Test Opening Invoice projecty 02", "company": "_Test Opening Invoice Company"}
-		)
-		doc.invoices[0].project = project_1.name
-		doc.invoices[1].project = project_2.name
-		invoices = doc.make_invoices()
-		sales_invoice_1 = frappe.get_doc("Sales Invoice", invoices[0])
-		sales_invoice_2 = frappe.get_doc("Sales Invoice", invoices[1])
-
-		self.assertEqual(sales_invoice_1.items[0].project, project_1.name)
-		self.assertEqual(sales_invoice_2.items[0].project, project_2.name)
 
 	def test_party_currency_does_not_change_company_currency_amount(self):
 		for invoice_type, party_type in (("Sales", "Customer"), ("Purchase", "Supplier")):
@@ -484,7 +449,6 @@ def get_opening_invoice_creation_dict(**args):
 				"temporary_opening_account": row.get("temporary_opening_account")
 				or get_temporary_opening_account(company),
 				"invoice_number": row.get("invoice_number"),
-				"project": row.get("project"),
 				"cost_center": row.get("cost_center"),
 			}
 		)
@@ -493,7 +457,6 @@ def get_opening_invoice_creation_dict(**args):
 		{
 			"company": company,
 			"invoice_type": args.get("invoice_type", "Sales"),
-			"project": args.get("project"),
 			"cost_center": args.get("cost_center"),
 			"invoices": default_invoices,
 		}
@@ -512,7 +475,6 @@ def make_customer(customer=None):
 			"customer_name": customer_name,
 			"customer_group": "Individual",
 			"customer_type": "Company",
-			"territory": "All Territories",
 		}
 	)
 

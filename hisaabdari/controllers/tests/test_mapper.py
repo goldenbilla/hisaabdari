@@ -59,15 +59,7 @@ class TestMapper(ERPNextTestSuite):
 		from hisaabdari.selling.doctype.quotation.test_quotation import make_quotation
 		from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
 		from hisaabdari.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
-		from hisaabdari.stock.doctype.material_request.test_material_request import (
-			make_material_request_for_items,
-		)
 		from hisaabdari.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
-
-		self.load_test_records("Supplier Quotation")
-
-		def make_supplier_quotation():
-			return frappe.copy_doc(self.globalTestRecords["Supplier Quotation"][0]).submit()
 
 		return [
 			(
@@ -89,16 +81,6 @@ class TestMapper(ERPNextTestSuite):
 				"Delivery Note -> Sales Invoice",
 				lambda: create_delivery_note(),
 				"hisaabdari.stock.doctype.delivery_note.delivery_note.make_sales_invoice",
-			),
-			(
-				"Material Request -> Purchase Order",
-				lambda: make_material_request_for_items(["_Test Item"]),
-				"hisaabdari.stock.doctype.material_request.material_request.make_purchase_order",
-			),
-			(
-				"Supplier Quotation -> Purchase Order",
-				make_supplier_quotation,
-				"hisaabdari.buying.doctype.supplier_quotation.supplier_quotation.make_purchase_order",
 			),
 			(
 				"Purchase Order -> Purchase Receipt",

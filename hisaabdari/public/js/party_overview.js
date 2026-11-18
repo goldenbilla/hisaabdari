@@ -571,6 +571,14 @@ hisaabdari.PartyOverview = class PartyOverview {
 		};
 		frappe.set_route("query-report", this.ledger_report);
 	}
+	open_reconciliation() {
+		frappe.route_options = {
+			company: this.state.company,
+			party_type: this.party_type,
+			party: this.frm.doc.name,
+		};
+		frappe.set_route("Form", "Payment Reconciliation");
+	}
 	list_route(doctype, filters) {
 		frappe.route_options = filters;
 		frappe.set_route("List", doctype);

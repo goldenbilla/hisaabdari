@@ -5,7 +5,6 @@ import frappe
 from frappe.utils import getdate
 
 from hisaabdari.accounts.doctype.payment_entry.payment_entry import get_payment_entry
-from hisaabdari.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
 from hisaabdari.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 from hisaabdari.accounts.report.payment_period_based_on_invoice_date.payment_period_based_on_invoice_date import (
 	execute,
@@ -130,23 +129,6 @@ class TestPaymentPeriodBasedOnInvoiceDate(ERPNextTestSuite):
 
 		self.assertEqual(
 			[(row["payment_entry"], row["amount"]) for row in data], [(payment.name, payment.paid_amount)]
-		)
-
-	def test_cash_invoice_payments_are_listed(self):
-		pos_profile = make_pos_profile()
-		invoice = create_sales_invoice(
-			customer="_Test Customer", rate=1000, posting_date="2026-06-01", do_not_save=True
-		)
-		invoice.is_pos = 1
-		invoice.pos_profile = pos_profile.name
-		invoice.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 1000})
-		invoice.submit()
-
-		_columns, data = self.run_report(party="_Test Customer")
-
-		self.assertEqual(
-			[(row["payment_entry"], row["invoice"], row["amount"]) for row in data],
-			[(invoice.name, invoice.name, 1000)],
 		)
 
 	def test_user_sees_payments_of_permitted_customers_only(self):

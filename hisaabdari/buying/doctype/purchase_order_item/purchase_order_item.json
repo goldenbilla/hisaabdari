@@ -45,6 +45,7 @@
   "sec_break2",
   "rate",
   "amount",
+  "item_tax_template",
   "col_break4",
   "base_rate",
   "base_amount",
@@ -579,6 +580,12 @@
    "oldfieldname": "page_break",
    "oldfieldtype": "Check",
    "print_hide": 1
+  },
+  {
+   "fieldname": "item_tax_template",
+   "fieldtype": "Link",
+   "label": "Item Tax Template",
+   "options": "Item Tax Template"
   },
   {
    "fieldname": "section_break_72",

@@ -3,7 +3,6 @@
 
 import frappe
 
-from hisaabdari.accounts.doctype.journal_entry.test_journal_entry import make_journal_entry
 from hisaabdari.accounts.doctype.payment_entry.test_payment_entry import create_payment_entry
 from hisaabdari.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
 from hisaabdari.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
@@ -136,23 +135,3 @@ class TestTrialBalanceForParty(ERPNextTestSuite):
 
 		self.assertEqual({row["party"] for row in data[:-1]}, {"_Test Customer 1"})
 		self.assertEqual(data[-1]["debit"], 10000)
-
-	def test_alternative_finance_book_entries_excluded(self):
-		customer = "_Test Customer"
-		create_sales_invoice(customer=customer, qty=1, rate=10000, posting_date="2026-06-01")
-		self.make_finance_book_credit(customer, 1500, "2025-12-15")
-		self.make_finance_book_credit(customer, 4000, "2026-06-10")
-
-		row = self.party_row(customer, include_default_book_entries=1)
-		self.assertEqual((row["opening_credit"], row["credit"], row["closing_debit"]), (0, 0, 10000))
-
-		row = self.party_row(customer, finance_book="Test Finance Book 1")
-		self.assertEqual((row["opening_credit"], row["credit"], row["closing_debit"]), (1500, 4000, 4500))
-
-	def make_finance_book_credit(self, customer: str, amount: float, posting_date: str) -> None:
-		journal = make_journal_entry(
-			"Sales - _TC", "Debtors - _TC", amount, posting_date=posting_date, save=False
-		)
-		journal.accounts[1].update({"party_type": "Customer", "party": customer})
-		journal.finance_book = "Test Finance Book 1"
-		journal.submit()

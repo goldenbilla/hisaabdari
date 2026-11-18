@@ -487,6 +487,31 @@ hisaabdari.taxes_and_totals = class TaxesAndTotals extends hisaabdari.stock.Stoc
 		frappe.model.round_floats_in(this.frm.doc, ["total", "base_total", "net_total", "base_net_total"]);
 	}
 
+	add_taxes_from_item_tax_template(item_tax_map) {
+		let me = this;
+
+		if (item_tax_map && cint(frappe.defaults.get_default("add_taxes_from_item_tax_template"))) {
+			if (typeof item_tax_map == "string") {
+				item_tax_map = JSON.parse(item_tax_map);
+			}
+
+			$.each(item_tax_map, function (tax, rate) {
+				if (rate === NOT_APPLICABLE_TAX) {
+					return;
+				}
+
+				let found = (me.frm.doc.taxes || []).find((d) => d.account_head === tax);
+				if (!found) {
+					let child = frappe.model.add_child(me.frm.doc, "taxes");
+					child.charge_type = "On Net Total";
+					child.account_head = tax;
+					child.rate = 0;
+					child.set_by_item_tax_template = true;
+				}
+			});
+		}
+	}
+
 	calculate_taxes() {
 		// reset value from earlier calculations
 		this.grand_total_diff = 0;

@@ -19,6 +19,8 @@
   "column_break_5",
   "defaults",
   "item_group_defaults",
+  "sec_break_taxes",
+  "taxes",
   "lft",
   "old_parent",
   "rgt"
@@ -83,6 +85,17 @@
    "fieldtype": "Table",
    "label": "Item Group Defaults",
    "options": "Item Default"
+  },
+  {
+   "fieldname": "sec_break_taxes",
+   "fieldtype": "Section Break",
+   "label": "Item Tax"
+  },
+  {
+   "fieldname": "taxes",
+   "fieldtype": "Table",
+   "label": "Taxes",
+   "options": "Item Tax"
   },
   {
    "fieldname": "lft",

@@ -177,6 +177,8 @@ accounting_dimension_doctypes = ['GL Entry',
  'Purchase Receipt',
  'Sales Order',
  'Account Closing Balance',
+ 'Payment Reconciliation',
+ 'Payment Reconciliation Allocation',
  'Advance Taxes and Charges']
 
 global_search_doctypes = {'Default': [{'doctype': 'Customer', 'index': 0},

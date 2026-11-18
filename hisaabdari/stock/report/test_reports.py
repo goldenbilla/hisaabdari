@@ -27,16 +27,6 @@ REPORT_FILTER_TEST_CASES: list[tuple[ReportName, ReportFilters]] = [
 	("Batch-Wise Balance History", {}),
 	("Itemwise Recommended Reorder Level", {"item_group": "All Item Groups"}),
 	("COGS By Item Group", {}),
-	("Stock Qty vs Serial No Count", {"warehouse": "_Test Warehouse - _TC"}),
-	(
-		"Stock and Account Value Comparison",
-		{
-			"company": "_Test Company with perpetual inventory",
-			"account": "Stock In Hand - TCP1",
-			"as_on_date": "2021-01-01",
-		},
-	),
-	("Product Bundle Balance", {"date": "2022-01-01", "_optional": True}),
 	(
 		"Stock Analytics",
 		{
@@ -48,33 +38,16 @@ REPORT_FILTER_TEST_CASES: list[tuple[ReportName, ReportFilters]] = [
 	),
 	("Warehouse wise Item Balance Age and Value", {"_optional": True}),
 	(
-		"Item Variant Details",
-		{
-			"item": "_Test Variant Item",
-		},
-	),
-	(
 		"Total Stock Summary",
 		{
 			"group_by": "warehouse",
 		},
 	),
-	("Batch Item Expiry Status", {}),
-	(
-		"Incorrect Stock Value Report",
-		{"company": "_Test Company with perpetual inventory", "account": "Stock In Hand - TCP1"},
-	),
-	("Incorrect Serial No Valuation", {}),
-	("Incorrect Balance Qty After Transaction", {}),
 	("Item Wise Consumption", {}),
 	("Item Prices", {"items": "Enabled Items only"}),
-	("Item Where Used", {"item": "_Test Item", "_optional": True}),
 	("Delayed Item Report", {"based_on": "Sales Invoice"}),
 	("Delayed Item Report", {"based_on": "Delivery Note"}),
 	("Stock Ageing", {"range": "30, 60, 90", "_optional": True}),
-	("Stock Ledger Invariant Check", {"warehouse": "_Test Warehouse - _TC", "item": "_Test Item"}),
-	("FIFO Queue vs Qty After Transaction Comparison", {"warehouse": "_Test Warehouse - _TC"}),
-	("FIFO Queue vs Qty After Transaction Comparison", {"item_group": "All Item Groups"}),
 ]
 
 OPTIONAL_FILTERS = {

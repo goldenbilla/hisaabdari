@@ -14,6 +14,7 @@ class ItemTax(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		item_tax_template: DF.Link
 		maximum_net_rate: DF.Float
 		minimum_net_rate: DF.Float
 		parent: DF.Data

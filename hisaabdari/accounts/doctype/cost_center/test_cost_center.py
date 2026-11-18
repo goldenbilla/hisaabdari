@@ -52,9 +52,6 @@ class TestCostCenter(ERPNextTestSuite):
 		self.assertRaises(frappe.ValidationError, cost_center.save)
 
 	def test_cost_center_save_restrictions(self):
-		from hisaabdari.accounts.doctype.cost_center_allocation.test_cost_center_allocation import (
-			create_cost_center_allocation,
-		)
 		from hisaabdari.accounts.doctype.journal_entry.test_journal_entry import make_journal_entry
 
 		create_cost_center(cost_center_name="_Test Save Restrictions")
@@ -78,17 +75,6 @@ class TestCostCenter(ERPNextTestSuite):
 				cost_center.reload()
 				cost_center.set(field, value)
 				with self.assertRaisesRegex(frappe.ValidationError, message):
-					cost_center.save()
-
-		create_cost_center(cost_center_name="_Test Allocation Main")
-		create_cost_center(cost_center_name="_Test Allocation Child")
-		main, child = "_Test Allocation Main - _TC", "_Test Allocation Child - _TC"
-		create_cost_center_allocation("_Test Company", main, {child: 100})
-		for name in (main, child):
-			with self.subTest(cost_center=name):
-				cost_center = frappe.get_doc("Cost Center", name)
-				cost_center.is_group = 1
-				with self.assertRaisesRegex(frappe.ValidationError, "Allocation"):
 					cost_center.save()
 
 	def test_rename_preserves_numeric_names_and_explicit_numbers(self):

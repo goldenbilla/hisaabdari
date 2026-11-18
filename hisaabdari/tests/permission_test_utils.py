@@ -2,7 +2,6 @@ from contextlib import contextmanager
 
 import frappe
 from frappe.exceptions import FrappeTypeError
-from frappe.utils import today
 
 OTHER_COMPANY = "_Test Company 3"
 MISSING_NAME = "_Test Missing UP Record"
@@ -173,20 +172,3 @@ def make_bank_account(account_name, company, account):
 def make_other_company_bank_account():
 	return make_bank_account("_Test UP Other", OTHER_COMPANY, make_other_company_bank_gl())
 
-
-def make_bank_transaction(bank_account, deposit=0, withdrawal=0, reference_number=None):
-	return (
-		frappe.get_doc(
-			{
-				"doctype": "Bank Transaction",
-				"date": today(),
-				"deposit": deposit,
-				"withdrawal": withdrawal,
-				"bank_account": bank_account,
-				"currency": "INR",
-				"reference_number": reference_number or frappe.generate_hash(length=10),
-			}
-		)
-		.save()
-		.submit()
-	)

@@ -56,6 +56,17 @@
    "collapsible": 1,
    "indent": 0,
    "keep_closed": 0,
+   "label": "Payment Reconciliation",
+   "link_to": "Payment Reconciliation",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Unreconcile Payment",
    "link_to": "Unreconcile Payment",
    "link_type": "DocType",

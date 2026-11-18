@@ -30,7 +30,6 @@
   ],
   "base_grand_total": 561.8,
   "grand_total": 561.8,
-  "is_pos": 0,
   "naming_series": "T-SINV-",
   "base_net_total": 500.0,
   "taxes": [
@@ -55,8 +54,7 @@
   ],
   "plc_conversion_rate": 1.0,
   "price_list_currency": "INR",
-  "selling_price_list": "_Test Price List",
-  "territory": "_Test Territory"
+  "selling_price_list": "_Test Price List"
  },
  {
   "company": "_Test Company",
@@ -89,7 +87,6 @@
   ],
   "base_grand_total": 630.0,
   "grand_total": 630.0,
-  "is_pos": 0,
   "naming_series": "T-SINV-",
   "base_net_total": 500.0,
   "taxes": [
@@ -114,8 +111,7 @@
   ],
   "plc_conversion_rate": 1.0,
   "price_list_currency": "INR",
-  "selling_price_list": "_Test Price List",
-  "territory": "_Test Territory"
+  "selling_price_list": "_Test Price List"
  },
  {
   "company": "_Test Company",
@@ -160,7 +156,6 @@
    }
   ],
   "grand_total": 0,
-  "is_pos": 0,
   "naming_series": "T-SINV-",
   "taxes": [
    {
@@ -242,8 +237,7 @@
   ],
   "plc_conversion_rate": 1.0,
   "price_list_currency": "INR",
-  "selling_price_list": "_Test Price List",
-  "territory": "_Test Territory"
+  "selling_price_list": "_Test Price List"
  },
  {
   "company": "_Test Company",
@@ -286,7 +280,6 @@
    }
   ],
   "grand_total": 0,
-  "is_pos": 0,
   "naming_series": "T-SINV-",
   "taxes": [
    {
@@ -381,8 +374,7 @@
   ],
   "plc_conversion_rate": 1.0,
   "price_list_currency": "INR",
-  "selling_price_list": "_Test Price List",
-  "territory": "_Test Territory"
+  "selling_price_list": "_Test Price List"
  },
  {
   "company": "_Test Company",
@@ -415,7 +407,6 @@
   ],
   "base_grand_total": 561.8,
   "grand_total": 561.8,
-  "is_pos": 0,
   "naming_series": "T-SINV-",
   "base_net_total": 500.0,
   "taxes": [
@@ -440,8 +431,7 @@
   ],
   "plc_conversion_rate": 1.0,
   "price_list_currency": "INR",
-  "selling_price_list": "_Test Price List",
-  "territory": "_Test Territory"
+  "selling_price_list": "_Test Price List"
  },
  {
   "company": "_Test Company",
@@ -474,7 +464,6 @@
   ],
   "base_grand_total": 630.0,
   "grand_total": 630.0,
-  "is_pos": 0,
   "naming_series": "T-SINV-",
   "base_net_total": 500.0,
   "taxes": [
@@ -499,8 +488,7 @@
   ],
   "plc_conversion_rate": 1.0,
   "price_list_currency": "INR",
-  "selling_price_list": "_Test Price List",
-  "territory": "_Test Territory"
+  "selling_price_list": "_Test Price List"
  },
  {
   "company": "_Test Company",
@@ -545,7 +533,6 @@
    }
   ],
   "grand_total": 0,
-  "is_pos": 0,
   "naming_series": "T-SINV-",
   "taxes": [
    {
@@ -627,8 +614,7 @@
   ],
   "plc_conversion_rate": 1.0,
   "price_list_currency": "INR",
-  "selling_price_list": "_Test Price List",
-  "territory": "_Test Territory"
+  "selling_price_list": "_Test Price List"
  },
  {
   "company": "_Test Company",
@@ -671,7 +657,6 @@
    }
   ],
   "grand_total": 0,
-  "is_pos": 0,
   "naming_series": "T-SINV-",
   "taxes": [
    {
@@ -766,7 +751,6 @@
   ],
   "plc_conversion_rate": 1.0,
   "price_list_currency": "INR",
-  "selling_price_list": "_Test Price List",
-  "territory": "_Test Territory"
+  "selling_price_list": "_Test Price List"
  }
 ]

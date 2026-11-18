@@ -611,11 +611,6 @@ class SalesOrder(SellingController):
 					item.delivery_date = self.delivery_date
 
 
-@frappe.whitelist()
-def is_enable_cutoff_date_on_bulk_delivery_note_creation():
-	return frappe.get_single_value("Selling Settings", "enable_cutoff_date_on_bulk_delivery_note_creation")
-
-
 @frappe.whitelist(methods=["POST"])
 def close_or_unclose_sales_orders(names, status):
 	frappe.has_permission("Sales Order", "write", throw=True)
@@ -1088,6 +1083,7 @@ def make_purchase_order(source_name, selected_items=None, target_doc=None):
 					"field_no_map": [
 						"rate",
 						"price_list_rate",
+						"item_tax_template",
 						"discount_percentage",
 						"discount_amount",
 						"mapped_additional_discount_amount",

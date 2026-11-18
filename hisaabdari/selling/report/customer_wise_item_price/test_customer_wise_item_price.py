@@ -34,7 +34,6 @@ class TestCustomerWiseItemPrice(ERPNextTestSuite):
 			customer = frappe.new_doc("Customer")
 			customer.customer_name = name
 			customer.customer_group = "_Test Customer Group"
-			customer.territory = "_Test Territory"
 			customer.default_price_list = price_list
 			customer.insert()
 		return name

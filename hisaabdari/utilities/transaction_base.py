@@ -9,7 +9,7 @@ from frappe.utils import cint, flt, get_time, now_datetime
 
 from hisaabdari.controllers.status_updater import StatusUpdater
 from hisaabdari.setup.doctype.uom.uom import validate_uoms_are_enabled
-from hisaabdari.stock.get_item_details import _get_item_details
+from hisaabdari.stock.get_item_details import NOT_APPLICABLE_TAX, _get_item_details
 from hisaabdari.stock.utils import _get_incoming_rate
 
 
@@ -354,6 +354,7 @@ class TransactionBase(StatusUpdater):
 					"weight_uom": item.get("weight_uom"),
 					"stock_uom": item.get("stock_uom"),
 					"cost_center": item.get("cost_center"),
+					"item_tax_template": item.get("item_tax_template"),
 					"child_doctype": item.get("doctype"),
 					"child_docname": item.get("name"),
 					"use_serial_batch_fields": item.get("use_serial_batch_fields"),
@@ -392,6 +393,7 @@ class TransactionBase(StatusUpdater):
 		self.set_fetched_values(item_obj, item_details)
 
 		self.set_item_rate_and_discounts(item_obj, item_details)
+		self.add_taxes_from_item_template(item_obj, item_details)
 		self.handle_internal_parties(item_obj, item_details)
 		self.conversion_factor(item_obj, item_details)
 		self.calculate_taxes_and_totals()
@@ -449,6 +451,24 @@ class TransactionBase(StatusUpdater):
 			item_obj.rate = rate * item_obj.conversion_factor
 		else:
 			self.set_rate_based_on_price_list(item_obj, item_details)
+
+	def add_taxes_from_item_template(self, item_obj: object, item_details: dict) -> None:
+		if item_details.item_tax_rate and frappe.get_single_value(
+			"Accounts Settings", "add_taxes_from_item_tax_template"
+		):
+			item_tax_template = frappe.json.loads(item_details.item_tax_rate)
+			for tax_head, _rate in item_tax_template.items():
+				if _rate == NOT_APPLICABLE_TAX:
+					continue
+
+				found = [x for x in self.taxes if x.account_head == tax_head]
+				if not found:
+					child_doctype = self.get_table_field_doctype("taxes")
+					child = frappe.new_doc(child_doctype, parent_doc=self, parentfield="taxes")
+					child.charge_type = "On Net Total"
+					child.account_head = tax_head
+					child.rate = 0
+					self.append("taxes", child)
 
 	def set_rate_based_on_price_list(self, item_obj: object, item_details: dict) -> None:
 		if item_obj.price_list_rate and item_obj.discount_percentage:

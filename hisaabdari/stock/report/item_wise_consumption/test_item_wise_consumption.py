@@ -22,29 +22,6 @@ class TestItemWiseConsumption(ERPNextTestSuite):
 		)
 		return execute(filters)[1]
 
-	def test_transfer_for_manufacture_is_not_consumption(self):
-		item = make_item(properties={"is_stock_item": 1}).name
-		make_purchase_receipt(item_code=item, qty=10, rate=100, warehouse=WH, posting_date="2026-06-01")
-		transfer = make_stock_entry(
-			item_code=item,
-			from_warehouse=WH,
-			to_warehouse="Work In Progress - _TC",
-			qty=4,
-			posting_date="2026-06-02",
-			do_not_save=True,
-		)
-		transfer.purpose = "Material Transfer for Manufacture"
-		transfer.stock_entry_type = "Material Transfer for Manufacture"
-		transfer.insert()
-		transfer.submit()
-		make_stock_entry(
-			item_code=item, from_warehouse="Work In Progress - _TC", qty=4, posting_date="2026-06-03"
-		)
-
-		row = next(r for r in self.run_report() if r[0] == item)
-
-		self.assertEqual((row[4], row[5]), (4, 400))
-
 	def test_returns_are_netted(self):
 		from hisaabdari.stock.doctype.delivery_note.delivery_note import make_sales_return
 		from hisaabdari.stock.doctype.purchase_receipt.purchase_receipt import make_purchase_return

@@ -104,19 +104,6 @@ class TestPriceList(ERPNextTestSuite):
 		price_list.buying = 1
 		self.assertRaises(frappe.ValidationError, price_list.save)
 
-	def test_selling_cannot_be_removed_while_pos_profile_default(self):
-		price_list = self.make_price_list(buying=0, selling=1)
-		pos_profile = frappe.get_all("POS Profile", pluck="name", limit=1)
-		if not pos_profile:
-			from hisaabdari.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
-
-			pos_profile = [make_pos_profile().name]
-		frappe.db.set_value("POS Profile", pos_profile[0], "selling_price_list", price_list.name)
-
-		price_list.selling = 0
-		price_list.buying = 1
-		self.assertRaises(frappe.ValidationError, price_list.save)
-
 	def test_price_list_restricted_to_other_country_is_refused(self):
 		from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
 

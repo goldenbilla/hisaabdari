@@ -18,6 +18,7 @@ class ItemGroup(NestedSet):
 		from frappe.types import DF
 
 		from hisaabdari.stock.doctype.item_default.item_default import ItemDefault
+		from hisaabdari.stock.doctype.item_tax.item_tax import ItemTax
 
 		image: DF.AttachImage | None
 		is_group: DF.Check
@@ -27,6 +28,7 @@ class ItemGroup(NestedSet):
 		old_parent: DF.Link | None
 		parent_item_group: DF.Link | None
 		rgt: DF.Int
+		taxes: DF.Table[ItemTax]
 	# end: auto-generated types
 
 	def validate(self):
@@ -37,6 +39,22 @@ class ItemGroup(NestedSet):
 			if root and root != self.name:
 				self.parent_item_group = root
 		self.validate_item_group_defaults()
+		self.check_item_tax()
+
+	def check_item_tax(self):
+		"""Check whether Tax Rate is not entered twice for same Tax Type"""
+		check_list = []
+		for d in self.get("taxes"):
+			if d.item_tax_template:
+				if d.item_tax_template in check_list:
+					frappe.throw(
+						_("{0} entered twice {1} in Item Taxes").format(
+							frappe.bold(d.item_tax_template),
+							"",
+						)
+					)
+				else:
+					check_list.append(d.item_tax_template)
 
 	def on_update(self):
 		NestedSet.on_update(self)

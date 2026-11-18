@@ -19,7 +19,6 @@ class TestCustomerCreditBalance(ERPNextTestSuite):
 				"doctype": "Customer",
 				"customer_name": customer_name,
 				"customer_group": "_Test Customer Group",
-				"territory": "_Test Territory",
 				"credit_limits": [
 					{
 						"company": company,
@@ -50,7 +49,6 @@ class TestCustomerCreditBalance(ERPNextTestSuite):
 				"doctype": "Customer",
 				"customer_name": customer_name,
 				"customer_group": "_Test Customer Group",
-				"territory": "_Test Territory",
 				"credit_limits": [
 					{
 						"company": "_Test Company 1",
@@ -85,7 +83,6 @@ class TestCustomerCreditBalance(ERPNextTestSuite):
 				"doctype": "Customer",
 				"customer_name": "_Test Credit Balance " + random_string(8),
 				"customer_group": group.name,
-				"territory": "_Test Territory",
 			}
 		).insert()
 
@@ -106,7 +103,6 @@ class TestCustomerCreditBalance(ERPNextTestSuite):
 				"doctype": "Customer",
 				"customer_name": "_Test Credit Balance " + random_string(8),
 				"customer_group": "_Test Customer Group",
-				"territory": "_Test Territory",
 			}
 		).insert()
 

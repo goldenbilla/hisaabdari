@@ -69,7 +69,7 @@ class TestStockAgeing(ERPNextTestSuite):
 		self.assertEqual(result["qty_after_transaction"], result["total_qty"])
 		self.assertEqual(queue[0][0], 20.0)
 		data = format_report_data(self.filters, slots, self.filters["to_date"])
-		self.assertEqual(data[0][8], 40.0)  # valuating for stock value between age 0-30
+		self.assertEqual(data[0][7], 40.0)  # valuating for stock value between age 0-30
 
 	def test_moving_average_value_ties_to_stock_balance(self):
 		"""For Moving Average items the queue value is re-derived as qty * rate so the
@@ -346,7 +346,6 @@ class TestStockAgeing(ERPNextTestSuite):
 				item_name="Flask Item",
 				description="Flask Item",
 				item_group=None,
-				brand=None,
 				stock_uom="Nos",
 				actual_qty=actual_qty,
 				qty_after_transaction=qty_after,
@@ -383,7 +382,7 @@ class TestStockAgeing(ERPNextTestSuite):
 		report_data = format_report_data(filters, slots, filters.to_date)
 
 		self.assertEqual(queue, [[60.0, "2025-11-30", 60.0], [30.0, "2026-01-31", 30.0]])
-		self.assertEqual(report_data[0][7:15], [30.0, 30.0, 0.0, 0.0, 60.0, 60.0, 0.0, 0.0])
+		self.assertEqual(report_data[0][6:14], [30.0, 30.0, 0.0, 0.0, 60.0, 60.0, 0.0, 0.0])
 
 	def test_stock_reco_revaluation_rescales_queue_values(self):
 		"Ledger (same wh): [+15 @ 100, reco reset >> 20 @ 50]"
@@ -1457,8 +1456,8 @@ class TestStockAgeing(ERPNextTestSuite):
 		slots = FIFOSlots(self.filters, sle).generate()
 		report_data = format_report_data(self.filters, slots, self.filters["to_date"])
 		row = report_data[0]  # first row in report
-		bal_qty = row[5]
-		range_qty_sum = sum([i for i in row[7:11]])  # get sum of range balance
+		bal_qty = row[4]
+		range_qty_sum = sum([i for i in row[6:10]])  # get sum of range balance
 
 		# check if value of Available Qty column matches with range bucket post format
 		self.assertEqual(bal_qty, 0.9)
@@ -1567,7 +1566,7 @@ class TestStockAgeing(ERPNextTestSuite):
 
 		slots = FIFOSlots(self.filters, sle).generate()
 		report_data = format_report_data(self.filters, slots, "2022-03-31")
-		range_values = report_data[0][7:15]
+		range_values = report_data[0][6:14]
 		range_valuations = range_values[1::2]
 		self.assertEqual(range_valuations, [15, 7.5, 20, 5])
 
@@ -1579,7 +1578,6 @@ class TestStockAgeing(ERPNextTestSuite):
 					item_name="Batch Mixed Item",
 					description="Batch Mixed Item",
 					item_group=None,
-					brand=None,
 					has_batch_no=True,
 					stock_uom="Nos",
 				),
@@ -1594,7 +1592,7 @@ class TestStockAgeing(ERPNextTestSuite):
 
 		report_data = format_report_data(self.filters, item_details, self.filters["to_date"])
 
-		self.assertEqual(report_data[0][7:15], [8.0, 80.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+		self.assertEqual(report_data[0][6:14], [8.0, 80.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
 	def test_average_age_accepts_batchwise_valuation_slots(self):
 		fifo_queue = [["SA-BATCH-SLOT", 1, 5.0, "2021-12-01", 50.0]]
@@ -1733,7 +1731,7 @@ class TestStockAgeing(ERPNextTestSuite):
 		)
 
 		report_data = format_report_data(self.filters, slots, self.filters["to_date"])
-		range_values = report_data[0][7:15]
+		range_values = report_data[0][6:14]
 		self.assertEqual(range_values, [44.0, 440.0, 62.0, 620.0, 75.0, 750.0, 40.0, 400.0])
 
 	def test_batchwise_valuation_same_voucher_transfer(self):
@@ -2323,7 +2321,7 @@ class TestStockAgeing(ERPNextTestSuite):
 		finally:
 			frappe.set_user("Administrator")
 
-		return [row[5] for row in data if row[0] == item_code]
+		return [row[4] for row in data if row[0] == item_code]
 
 	def test_item_rows_count_only_permitted_warehouses(self):
 		self.assertEqual(self.get_available_qty_for_restricted_user(), [2])
@@ -2354,7 +2352,7 @@ class TestStockAgeing(ERPNextTestSuite):
 				)
 			)[1]
 
-		return [row[5] for row in data if row[0] == item_code]
+		return [row[4] for row in data if row[0] == item_code]
 
 	def test_company_user_permission_limits_item_rows(self):
 		self.assertEqual(self.get_available_qty_for_company_user("_Test Company 1"), [])
@@ -2424,30 +2422,6 @@ class TestStockAgeing(ERPNextTestSuite):
 			has_serial_no=False,
 			serial_no=None,
 		)
-
-	def test_subcontracting_consumption_takes_stock_in_queue_order(self):
-		sle = [
-			self.make_sle(5, 500, "2021-09-01", "Stock Entry", "001"),
-			self.make_sle(5, 1500, "2021-10-01", "Stock Entry", "002"),
-			self.make_sle(5, 1000, "2021-11-01", "Stock Entry", "003"),
-			self.make_sle(-10, -2000, "2021-12-01", "Subcontracting Receipt", "004"),
-		]
-
-		slots = FIFOSlots(self.filters, sle).generate()
-
-		self.assertEqual(slots["Flask Item"]["fifo_queue"], [[5.0, "2021-11-01", 1000.0]])
-
-	def test_subcontracting_return_removes_the_returned_lot(self):
-		sle = [
-			self.make_sle(10, 1000, "2021-09-01", "Subcontracting Receipt", "001"),
-			self.make_sle(10, 2000, "2021-11-01", "Subcontracting Receipt", "002"),
-			self.make_sle(-10, -2000, "2021-12-01", "Subcontracting Receipt", "003"),
-		]
-
-		with patch.object(FIFOSlots, "_get_subcontracting_returns", return_value={"003"}):
-			slots = FIFOSlots(self.filters, sle).generate()
-
-		self.assertEqual(slots["Flask Item"]["fifo_queue"], [[10.0, "2021-09-01", 1000.0]])
 
 	def test_lifo_purchase_return_removes_the_newest_matching_lot(self):
 		sle = [

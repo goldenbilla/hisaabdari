@@ -50,6 +50,7 @@
   "net_rate",
   "amount",
   "net_amount",
+  "item_tax_template",
   "col_break3",
   "base_rate",
   "base_net_rate",
@@ -523,6 +524,13 @@
   {
    "fieldname": "col_break4",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_tax_template",
+   "fieldtype": "Link",
+   "label": "Item Tax Template",
+   "options": "Item Tax Template",
+   "print_hide": 1
   },
   {
    "allow_on_submit": 1,

@@ -43,6 +43,7 @@
   "sec_break2",
   "rate",
   "amount",
+  "item_tax_template",
   "col_break4",
   "base_rate",
   "base_amount",
@@ -467,6 +468,13 @@
    "print_hide": 1,
    "print_width": "120px",
    "width": "120px"
+  },
+  {
+   "fieldname": "item_tax_template",
+   "fieldtype": "Link",
+   "label": "Item Tax Template",
+   "options": "Item Tax Template",
+   "print_hide": 1
   },
   {
    "fieldname": "col_break5",

@@ -20,6 +20,24 @@ class TestExchangeRateRevaluation(ERPNextTestSuite):
 		self.cost_center = "Main - _TC"
 		self.debtors_usd = "_Test Receivable USD - _TC"
 		self.set_system_and_company_settings()
+		self.make_current_exchange_rate()
+
+	def make_current_exchange_rate(self):
+		# tests here disallow stale rates, so a rate dated today must exist
+		if not frappe.db.exists(
+			"Currency Exchange", {"date": today(), "from_currency": "USD", "to_currency": "INR"}
+		):
+			frappe.get_doc(
+				{
+					"doctype": "Currency Exchange",
+					"date": today(),
+					"from_currency": "USD",
+					"to_currency": "INR",
+					"exchange_rate": 82,
+					"for_buying": 1,
+					"for_selling": 1,
+				}
+			).insert()
 
 	def set_system_and_company_settings(self):
 		# Using Exchange Gain/Loss account for unrealized as well.

@@ -306,9 +306,19 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Reconciliation",
-   "link_count": 1,
+   "link_count": 2,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Reconciliation",
+   "link_count": 0,
+   "link_to": "Payment Reconciliation",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   },
   {
    "hidden": 0,
@@ -694,6 +704,20 @@
    "keep_closed": 0,
    "label": "Purchase Tax Template",
    "link_to": "Purchase Taxes and Charges Template",
+   "link_type": "DocType",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "default_workspace": 0,
+   "icon": "package",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Item Tax Template",
+   "link_to": "Item Tax Template",
    "link_type": "DocType",
    "open_in_new_tab": 0,
    "show_arrow": 0,

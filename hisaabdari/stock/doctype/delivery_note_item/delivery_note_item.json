@@ -53,6 +53,7 @@
   "section_break_25",
   "net_rate",
   "net_amount",
+  "item_tax_template",
   "column_break_28",
   "base_net_rate",
   "base_net_amount",
@@ -542,6 +543,13 @@
    "options": "Account",
    "print_hide": 1,
    "width": "120px"
+  },
+  {
+   "fieldname": "item_tax_template",
+   "fieldtype": "Link",
+   "label": "Item Tax Template",
+   "options": "Item Tax Template",
+   "print_hide": 1
   },
   {
    "default": ":Company",

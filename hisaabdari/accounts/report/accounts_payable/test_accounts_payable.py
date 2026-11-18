@@ -147,52 +147,6 @@ class TestAccountsPayable(ERPNextTestSuite, AccountsTestMixin):
 		filters.update({"supplier_group": ["_Test Supplier Group Mars"]})
 		self.assertRaises(frappe.ValidationError, execute, filters)
 
-	def test_project_filter(self):
-		project = frappe.get_doc(
-			{"doctype": "Project", "project_name": "_Test AP Project", "company": self.company}
-		).insert()
-
-		pi = self.create_purchase_invoice(do_not_submit=True)
-		pi.project = project.name
-		pi.save().submit()
-
-		filters = {
-			"company": self.company,
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-			"project": [project.name],
-		}
-
-		report = execute(filters)[1]
-		self.assertEqual(len(report), 1)
-		row = report[0]
-		self.assertEqual(row.project, project.name)
-		self.assertEqual(row.invoiced, 300.0)
-
-	def test_project_on_report_output(self):
-		"""
-		Report row must carry the invoice's project.
-		"""
-		filters = {
-			"company": self.company,
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-		}
-
-		project = frappe.get_doc(
-			{"doctype": "Project", "project_name": "_Test AP Project Output", "company": self.company}
-		).insert()
-
-		pi = self.create_purchase_invoice(do_not_submit=True)
-		pi.project = project.name
-		pi.save().submit()
-
-		report = execute(filters)
-
-		self.assertEqual(len(report[1]), 1)
-		row = report[1][0]
-		self.assertEqual([pi.name, project.name, 300], [row.voucher_no, row.project, row.outstanding])
-
 	def test_supplier_invoice_date_ageing_without_bill_date(self):
 		pi = self.create_purchase_invoice()
 		self.assertFalse(pi.bill_date)

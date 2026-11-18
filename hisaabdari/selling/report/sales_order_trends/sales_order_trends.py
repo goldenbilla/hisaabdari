@@ -25,7 +25,7 @@ def get_chart_data(data, conditions, filters):
 	datapoints = []
 
 	if filters.get("based_on") in ["Customer"]:
-		start = 3
+		start = 2
 	elif filters.get("based_on") in ["Item"]:
 		start = 2
 	else:

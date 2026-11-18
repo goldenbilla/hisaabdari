@@ -1490,6 +1490,8 @@ def make_inter_company_transaction(doctype, source_name, target_doc=None):
 		if (source.get("serial_no") or source.get("batch_no")) and not source.get("serial_and_batch_bundle"):
 			target.use_serial_batch_fields = 1
 
+		clear_item_tax_template_of_other_company(target, details.get("company"))
+
 	item_field_map = {
 		"doctype": target_doctype + " Item",
 		"field_no_map": ["income_account", "expense_account", "cost_center", "warehouse"],
@@ -1570,6 +1572,14 @@ def validate_not_made_from_counterpart(source_doc, target_doctype, received_item
 				get_link_to_form(target_doctype, reference),
 			)
 		)
+
+
+def clear_item_tax_template_of_other_company(item, company):
+	if (
+		item.get("item_tax_template")
+		and frappe.get_cached_value("Item Tax Template", item.item_tax_template, "company") != company
+	):
+		item.item_tax_template = None
 
 
 @frappe.whitelist()

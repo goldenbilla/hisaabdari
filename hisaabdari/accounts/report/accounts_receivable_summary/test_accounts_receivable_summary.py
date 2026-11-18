@@ -40,12 +40,12 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			price_list_rate=200,
 		)
 
-		customer_group, customer_territory = frappe.db.get_all(
+		customer_group = frappe.db.get_all(
 			"Customer",
 			filters={"name": self.customer},
-			fields=["customer_group", "territory"],
+			fields=["customer_group"],
 			as_list=True,
-		)[0]
+		)[0][0]
 
 		report = execute(filters)
 		rpt_output = report[1]
@@ -65,9 +65,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			"range5": 0.0,
 			"total_due": 200.0,
 			"future_amount": 0.0,
-			"sales_person": [],
 			"currency": si.currency,
-			"territory": customer_territory,
 			"customer_group": customer_group,
 		}
 
@@ -137,12 +135,12 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		pe.references[0].allocated_amount = 150
 		pe.save().submit()
 
-		customer_group, customer_territory = frappe.db.get_all(
+		customer_group = frappe.db.get_all(
 			"Customer",
 			filters={"name": self.customer},
-			fields=["customer_group", "territory"],
+			fields=["customer_group"],
 			as_list=True,
-		)[0]
+		)[0][0]
 
 		report = execute(filters)
 		rpt_output = report[1]
@@ -163,9 +161,7 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			"range5": 0.0,
 			"total_due": 50.0,
 			"future_amount": 0.0,
-			"sales_person": [],
 			"currency": si.currency,
-			"territory": customer_territory,
 			"customer_group": customer_group,
 		}
 
@@ -193,42 +189,3 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		report = execute(filters)
 		rpt_output = report[1]
 		self.assertEqual(len(rpt_output), 0)
-
-	def test_03_summary_sales_partner_column(self):
-		partner = "_Test AR Summary Sales Partner"
-		if not frappe.db.exists("Sales Partner", partner):
-			frappe.get_doc(
-				{
-					"doctype": "Sales Partner",
-					"partner_name": partner,
-					"commission_rate": 0,
-					"territory": "All Territories",
-				}
-			).insert()
-
-		si = create_sales_invoice(
-			item=self.item,
-			company=self.company,
-			customer=self.customer,
-			debit_to=self.debit_to,
-			posting_date=today(),
-			parent_cost_center=self.cost_center,
-			cost_center=self.cost_center,
-			rate=200,
-			price_list_rate=200,
-			do_not_submit=True,
-		)
-		si.sales_partner = partner
-		si.save().submit()
-
-		filters = {
-			"company": self.company,
-			"customer": self.customer,
-			"posting_date": today(),
-			"range": "30, 60, 90, 120",
-			"sales_partner": partner,
-		}
-
-		rpt_output = execute(filters)[1]
-		self.assertEqual(len(rpt_output), 1)
-		self.assertEqual(rpt_output[0].get("sales_partner"), partner)

@@ -43,6 +43,7 @@ class SalesOrderItem(Document):
 		item_group: DF.Link | None
 		item_name: DF.Data
 		item_tax_rate: DF.Code | None
+		item_tax_template: DF.Link | None
 		mapped_additional_discount_amount: DF.Currency
 		margin_rate_or_amount: DF.Float
 		margin_type: DF.Literal["", "Percentage", "Amount"]

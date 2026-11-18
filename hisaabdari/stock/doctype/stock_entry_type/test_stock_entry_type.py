@@ -15,7 +15,7 @@ class TestStockEntryType(ERPNextTestSuite):
 			{
 				"doctype": "Stock Entry Type",
 				"__newname": stock_entry_type,
-				"purpose": "Manufacture",
+				"purpose": "Material Transfer",
 				"is_standard": 1,
 			}
 		)
@@ -27,11 +27,7 @@ class TestStockEntryType(ERPNextTestSuite):
 			"Material Issue",
 			"Material Receipt",
 			"Material Transfer",
-			"Material Transfer for Manufacture",
-			"Material Consumption for Manufacture",
-			"Manufacture",
 			"Repack",
-			"Send to Subcontractor",
 		]:
 			self.assertTrue(frappe.db.get_value("Stock Entry Type", stock_entry_type, "is_standard"))
 
@@ -62,5 +58,5 @@ class TestStockEntryType(ERPNextTestSuite):
 		self.assertEqual(frappe.db.get_value("Stock Entry Type", custom_type, "add_to_transit"), 1)
 
 	def test_standard_type_cannot_be_deleted(self):
-		self.assertRaises(frappe.ValidationError, frappe.delete_doc, "Stock Entry Type", "Disassemble")
-		self.assertTrue(frappe.db.exists("Stock Entry Type", "Disassemble"))
+		self.assertRaises(frappe.ValidationError, frappe.delete_doc, "Stock Entry Type", "Repack")
+		self.assertTrue(frappe.db.exists("Stock Entry Type", "Repack"))

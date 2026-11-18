@@ -66,11 +66,9 @@ class TestReactivity(ERPNextTestSuite):
 		self.assertEqual(item.uom, "Nos")
 		row_state = (item.qty, item.warehouse, item.delivery_date)
 
-		sales_order.ignore_pricing_rule = 1
 		item.weight_per_unit = 10
 		item.weight_uom = "Nos"
 		item.barcode = "OLD-BARCODE"
-		item.pricing_rules = "OLD-PRICING-RULE"
 		item.item_code = new_item.name
 		sales_order.process_item_selection(item.idx, reset_item_details=True)
 
@@ -80,7 +78,6 @@ class TestReactivity(ERPNextTestSuite):
 		self.assertEqual(item.weight_per_unit, 2)
 		self.assertEqual(item.weight_uom, "Kg")
 		self.assertIsNone(item.barcode)
-		self.assertFalse(item.pricing_rules)
 		self.assertEqual((item.qty, item.warehouse, item.delivery_date), row_state)
 
 	def test_programmatic_item_selection_preserves_explicit_uom(self):
@@ -171,29 +168,4 @@ class TestReactivity(ERPNextTestSuite):
 
 		self.assertRaises(
 			frappe.ValidationError, sales_order.process_item_selection, 1, parentfield="company"
-		)
-
-	def test_free_item_is_added_to_the_table_that_earned_it(self):
-		from hisaabdari.accounts.doctype.pricing_rule.test_pricing_rule import make_pricing_rule
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		item = make_item(properties={"is_stock_item": 0, "stock_uom": "Kg"})
-		optional_item = make_item(properties={"is_stock_item": 0, "stock_uom": "Kg"})
-		free_item = make_item(properties={"is_stock_item": 0, "stock_uom": "Kg"})
-		make_pricing_rule(
-			title=f"_Test Free Item Rule {optional_item.name}",
-			selling=1,
-			item_code=optional_item.name,
-			price_or_product_discount="Product",
-			free_item=free_item.name,
-			free_qty=1,
-		)
-		sales_order = self.make_sales_order_with_optional_items(item.name, [optional_item.name])
-
-		sales_order.process_item_selection(sales_order.optional_items[0].idx, parentfield="optional_items")
-
-		self.assertEqual([row.item_code for row in sales_order.items], [item.name])
-		self.assertEqual(
-			[row.item_code for row in sales_order.optional_items],
-			[optional_item.name, free_item.name],
 		)

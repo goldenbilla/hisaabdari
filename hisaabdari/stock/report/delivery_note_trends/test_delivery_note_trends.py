@@ -115,15 +115,6 @@ class TestDeliveryNoteTrends(ERPNextTestSuite):
 		self.assertEqual(after["Total(Qty)"] - before["Total(Qty)"], 5)
 		self.assertEqual(after["Total(Amt)"] - before["Total(Amt)"], 1000)
 
-	def test_based_on_territory(self):
-		territory = frappe.db.get_value("Customer", CUSTOMER, "territory")
-		cols = ["Total(Qty)", "Total(Amt)"]
-		before = self.values({"Territory": territory}, cols, based_on="Territory")
-		self.deliver(customer=CUSTOMER)
-		after = self.values({"Territory": territory}, cols, based_on="Territory")
-		self.assertEqual(after["Total(Qty)"] - before["Total(Qty)"], 5)
-		self.assertEqual(after["Total(Amt)"] - before["Total(Amt)"], 1000)
-
 	def test_group_by_item_under_customer(self):
 		# based_on=Customer with group_by=Item produces an item-wise breakdown row
 		cols = ["Total(Qty)", "Total(Amt)"]

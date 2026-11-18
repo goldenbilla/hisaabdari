@@ -105,14 +105,6 @@ class TestSalesPaymentSummary(ERPNextTestSuite):
 
 		self.assertTrue(cc_init_amount > cc_final_amount)
 
-	def test_equal_payments_from_different_sources_are_all_summed(self):
-		customer = make_customer("_Test Sales Payment Summary Customer")
-		make_pos_invoice(customer, paid=10000)
-		make_paid_invoice(customer)
-
-		row = run_report(customer)[0]
-		self.assertEqual((row[3], row[5]), (20000, 20000))
-
 	def test_sales_and_taxes_are_in_company_currency(self):
 		si = create_sales_invoice_record(customer="_Test Customer USD")
 		si.update({"currency": "USD", "conversion_rate": 50, "debit_to": "_Test Receivable USD - _TC"})
@@ -171,44 +163,25 @@ class TestSalesPaymentSummary(ERPNextTestSuite):
 		detail = run_report(si.customer, to_date=tomorrow, payment_detail=1)
 		self.assertEqual([row[5] for row in detail], [0, 4500])
 
-	def test_pos_view_deducts_change_from_payments(self):
-		customer = make_customer("_Test Sales Payment Summary Customer")
-		make_pos_invoice(customer, paid=12000)
-
-		self.assertEqual(run_report(customer, is_pos=1)[0][5], 10000)
-
-	def test_pos_view_includes_foreign_currency_invoices(self):
-		si = make_pos_invoice(
-			"_Test Customer USD",
-			paid=10000,
-			currency="USD",
-			conversion_rate=50,
-			debit_to="_Test Receivable USD - _TC",
-		)
-
-		row = run_report(si.customer, is_pos=1)[0]
-		self.assertEqual((row[3], row[5]), (500000, 500000))
-
 	def test_rows_are_limited_to_permitted_invoices(self):
 		customer = make_customer("_Test Sales Payment Summary Customer")
 		other_customer = make_customer("_Test Sales Payment Summary Other Customer")
-		make_pos_invoice(customer, paid=10000)
-		make_pos_invoice(other_customer, paid=10000)
+		make_paid_invoice(customer)
+		make_paid_invoice(other_customer)
 		user = make_restricted_user(customer)
 
-		for is_pos in (0, 1):
-			frappe.set_user(user)
-			try:
-				row = run_report(None, is_pos=is_pos)[0]
-			finally:
-				frappe.set_user("Administrator")
-			self.assertEqual((row[3], row[5]), (10000, 10000))
+		frappe.set_user(user)
+		try:
+			row = run_report(None)[0]
+		finally:
+			frappe.set_user("Administrator")
+		self.assertEqual((row[3], row[5]), (10000, 10000))
 
 	def test_unrestricted_user_gets_no_invoice_name_filter(self):
 		customer = make_customer("_Test Sales Payment Summary Customer")
 		other_customer = make_customer("_Test Sales Payment Summary Other Customer")
-		make_pos_invoice(customer, paid=10000)
-		make_pos_invoice(other_customer, paid=10000)
+		make_paid_invoice(customer)
+		make_paid_invoice(other_customer)
 		filters = frappe._dict(company="_Test Company", from_date=today(), to_date=today())
 
 		row = execute(filters)[1][0]
@@ -233,15 +206,6 @@ def run_report(customer, **filters):
 		}
 	)
 	return execute(filters)[1]
-
-
-def make_pos_invoice(customer, paid, **fields):
-	si = create_sales_invoice_record(customer=customer)
-	si.update({"is_pos": 1, **fields})
-	si.append("payments", {"mode_of_payment": "Cash", "account": "_Test Cash - _TC", "amount": paid})
-	si.insert()
-	si.submit()
-	return si
 
 
 def make_paid_invoice(customer, **fields):

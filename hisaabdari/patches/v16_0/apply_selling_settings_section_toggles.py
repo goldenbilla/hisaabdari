@@ -1,15 +1,11 @@
 import frappe
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
-from hisaabdari.selling.doctype.selling_settings.selling_settings import COMMISSION_SECTIONS, UTM_DOCTYPES
+from hisaabdari.selling.doctype.selling_settings.selling_settings import UTM_DOCTYPES
 
 
 def execute():
 	settings = frappe.get_single("Selling Settings")
-
-	for doctype, sections in COMMISSION_SECTIONS.items():
-		for section in sections:
-			_backfill_hidden(doctype, section, not settings.enable_tracking_sales_commissions)
 
 	for doctype in UTM_DOCTYPES:
 		if frappe.get_meta(doctype).has_field("utm_analytics_section"):

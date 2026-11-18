@@ -7,9 +7,6 @@ from collections import defaultdict
 import frappe
 from frappe.utils import add_days, today
 
-from hisaabdari.manufacturing.doctype.production_plan.test_production_plan import make_bom
-from hisaabdari.manufacturing.doctype.work_order.test_work_order import make_wo_order_test_record
-from hisaabdari.manufacturing.doctype.work_order.work_order import make_stock_entry
 from hisaabdari.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
 from hisaabdari.stock.doctype.item.test_item import make_item
 from hisaabdari.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
@@ -498,85 +495,3 @@ class TestItemWiseInventoryAccount(ERPNextTestSuite):
 			item.save()
 
 		return account
-
-	def test_item_account_for_manufacture_entry(self):
-		items = {
-			"Stock Item A1": {"is_stock_item": 1},
-			"Stock Item B1": {"is_stock_item": 1, "has_serial_no": 1, "serial_no_series": "SER-TT-.####"},
-		}
-
-		for item_name, item_data in items.items():
-			item = make_item(
-				item_name,
-				properties=item_data,
-			)
-
-			account = self.add_inventory_account(item)
-			items[item_name]["account"] = account
-
-		make_purchase_receipt(
-			item_code="Stock Item B1",
-			qty=5,
-			rate=100,
-			warehouse=self.default_warehouse,
-			company=self.company,
-		)
-
-		bom = make_bom(
-			item="Stock Item A1",
-			company=self.company,
-			source_warehouse=self.default_warehouse,
-			raw_materials=["Stock Item B1"],
-		)
-
-		wip_warehouse = frappe.db.get_value(
-			"Warehouse",
-			{"company": self.company, "is_group": 0, "warehouse_name": ("like", "%Work In Progress%")},
-		)
-
-		fg_warehouse = frappe.db.get_value(
-			"Warehouse",
-			{"company": self.company, "is_group": 0, "warehouse_name": ("like", "%Finished Goods%")},
-		)
-
-		wo_order = make_wo_order_test_record(
-			item="Stock Item A1",
-			qty=5,
-			company=self.company,
-			source_warehouse=self.default_warehouse,
-			bom=bom.name,
-			wip_warehouse=wip_warehouse,
-			fg_warehouse=fg_warehouse,
-		)
-
-		stock_entry = frappe.get_doc(make_stock_entry(wo_order.name, "Material Transfer for Manufacture", 5))
-		stock_entry.submit()
-
-		stock_entry = frappe.get_doc(make_stock_entry(wo_order.name, "Manufacture", 5))
-		stock_entry.submit()
-
-		for row in stock_entry.items:
-			item_code = row.item_code
-			account = items[item_code]["account"]
-
-			sle_value = frappe.db.get_value(
-				"Stock Ledger Entry",
-				{"voucher_type": "Stock Entry", "voucher_no": stock_entry.name, "item_code": item_code},
-				"stock_value_difference",
-			)
-
-			field = "debit" if row.t_warehouse == fg_warehouse else "credit"
-			gl_value = frappe.db.get_value(
-				"GL Entry",
-				{
-					"voucher_type": "Stock Entry",
-					"voucher_no": stock_entry.name,
-					"account": account,
-				},
-				field,
-			)
-
-			if row.s_warehouse:
-				gl_value = gl_value * -1
-
-			self.assertEqual(sle_value, gl_value, f"GL Entry not created for {item_code} correctly")

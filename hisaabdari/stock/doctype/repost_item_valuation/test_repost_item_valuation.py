@@ -864,7 +864,7 @@ class TestRepostItemValuation(ERPNextTestSuite, StockTestMixin):
 			item_code=rm,
 			source=warehouse,
 			qty=10,
-			purpose="Manufacture",
+			purpose="Repack",
 			posting_date=add_days(today(), -5),
 			do_not_save=True,
 		)
@@ -930,7 +930,7 @@ class TestRepostItemValuation(ERPNextTestSuite, StockTestMixin):
 			item_code=rm,
 			source=warehouse,
 			qty=10,
-			purpose="Manufacture",
+			purpose="Repack",
 			posting_date=add_days(today(), -5),
 			do_not_save=True,
 		)
@@ -995,7 +995,7 @@ class TestRepostItemValuation(ERPNextTestSuite, StockTestMixin):
 			item_code=rm,
 			source=warehouse,
 			qty=10,
-			purpose="Manufacture",
+			purpose="Repack",
 			posting_date=add_days(today(), -6),
 			do_not_save=True,
 		)
@@ -1087,7 +1087,7 @@ class TestRepostItemValuation(ERPNextTestSuite, StockTestMixin):
 			item_code=rm1,
 			source=warehouse,
 			qty=5,
-			purpose="Manufacture",
+			purpose="Repack",
 			posting_date=add_days(today(), -6),
 			do_not_save=True,
 		)

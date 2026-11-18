@@ -32,35 +32,6 @@ class TestUtils(ERPNextTestSuite):
 		doc.reset_default_field_value("set_warehouse", "items", "warehouse")
 		self.assertEqual(doc.set_warehouse, None)
 
-	def test_reset_default_field_value_in_mfg_stock_entry(self):
-		# manufacture stock entry with rows having blank source/target wh
-		se = frappe.get_doc(
-			doctype="Stock Entry",
-			purpose="Manufacture",
-			stock_entry_type="Manufacture",
-			company="_Test Company",
-			from_warehouse="_Test Warehouse - _TC",
-			to_warehouse="_Test Warehouse 1 - _TC",
-			items=[
-				frappe._dict(
-					item_code="_Test Item", qty=1, basic_rate=200, s_warehouse="_Test Warehouse - _TC"
-				),
-				frappe._dict(
-					item_code="_Test FG Item",
-					qty=4,
-					t_warehouse="_Test Warehouse 1 - _TC",
-					is_finished_item=1,
-				),
-			],
-		)
-		se.save()
-
-		# default fields must be untouched
-		self.assertEqual(se.from_warehouse, "_Test Warehouse - _TC")
-		self.assertEqual(se.to_warehouse, "_Test Warehouse 1 - _TC")
-
-		se.delete()
-
 	def test_reset_default_field_value_in_transfer_stock_entry(self):
 		doc = frappe.get_doc(
 			{

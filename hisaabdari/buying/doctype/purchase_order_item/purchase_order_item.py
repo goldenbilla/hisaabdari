@@ -41,6 +41,7 @@ class PurchaseOrderItem(Document):
 		item_group: DF.Link | None
 		item_name: DF.Data
 		item_tax_rate: DF.Code | None
+		item_tax_template: DF.Link | None
 		last_purchase_rate: DF.Currency
 		mapped_additional_discount_amount: DF.Currency
 		margin_rate_or_amount: DF.Float

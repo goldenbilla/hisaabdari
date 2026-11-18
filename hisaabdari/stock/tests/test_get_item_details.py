@@ -1,12 +1,10 @@
 import frappe
-from frappe.utils import today
 
 from hisaabdari.stock.get_item_details import (
 	get_batch_qty,
 	get_bin_details,
 	get_conversion_factor,
 	get_item_details,
-	get_price_list_currency_and_exchange_rate,
 	get_projected_qty,
 	get_valuation_rate,
 )
@@ -40,7 +38,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 					price_list="Standard Selling",
 					price_list_currency="INR",
 					plc_conversion_rate=1,
-					ignore_pricing_rule=1,
 				)
 			)
 
@@ -67,7 +64,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 				price_list="Standard Selling",
 				price_list_currency="INR",
 				plc_conversion_rate=1,
-				ignore_pricing_rule=1,
 			)
 		)
 
@@ -87,8 +83,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 				"supplier": "_Test Supplier",
 				"transaction_date": None,
 				"price_list": "_Test Buying Price List",
-				"is_subcontracted": 0,
-				"ignore_pricing_rule": 1,
 				"qty": 1,
 			}
 		)
@@ -138,7 +132,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 				"plc_conversion_rate": 1.0,
 				"transaction_date": None,
 				"name": None,
-				"ignore_pricing_rule": 1,
 				"qty": 1,
 			}
 		)
@@ -201,7 +194,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 				"customer": "_Test Customer",
 				"currency": "INR",
 				"conversion_rate": 1.0,
-				"ignore_pricing_rule": 1,
 				"qty": 1,
 			}
 		)
@@ -233,41 +225,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 					method(item_code, "_Test Warehouse 1 - _TC")
 
 			assert_refused(self, get_batch_qty, "_Test Batch", "_Test Warehouse - _TC", item_code)
-
-	def test_service_end_date_needs_item_code_as_text(self):
-		from hisaabdari.stock.doctype.item.test_item import make_item
-		from hisaabdari.stock.get_item_details import calculate_service_end_date
-
-		item = make_item(properties={"is_stock_item": 0, "enable_deferred_revenue": 1, "no_of_months": 12})
-		ctx = {"doctype": "Sales Invoice", "company": "_Test Company", "service_start_date": "2026-01-15"}
-
-		self.assertRaisesRegex(
-			frappe.ValidationError,
-			"Invalid Item Code",
-			calculate_service_end_date,
-			dict(ctx, item_code={"item_name": ["=", item.item_name]}),
-		)
-		details = calculate_service_end_date(dict(ctx, item_code=item.name))
-		self.assertEqual(str(details["service_end_date"]), "2027-01-15")
-		self.assertEqual(details["enable_deferred_revenue"], 1)
-
-	def test_service_end_date_needs_item_code_as_text_when_item_is_given(self):
-		from hisaabdari.stock.doctype.item.test_item import make_item
-		from hisaabdari.stock.get_item_details import calculate_service_end_date
-
-		item = make_item(properties={"is_stock_item": 0, "enable_deferred_revenue": 1, "no_of_months": 12})
-		ctx = {"doctype": "Sales Invoice", "company": "_Test Company", "service_start_date": "2026-01-15"}
-		item_values = {"enable_deferred_revenue": 1, "no_of_months": 12}
-
-		self.assertRaisesRegex(
-			frappe.ValidationError,
-			"Invalid Item Code",
-			calculate_service_end_date,
-			dict(ctx, item_code={"item_name": ["=", item.item_name]}),
-			item=item_values,
-		)
-		details = calculate_service_end_date(dict(ctx, item_code=item.name), item=item_values)
-		self.assertEqual(str(details["service_end_date"]), "2027-01-15")
 
 	# making this test in get_item_details test file as feat/fix is present in that method
 	def test_fetch_price_from_list_rate_on_doc_save(self):
@@ -392,7 +349,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 					"child_docname": pr.items[0].name,
 					"is_return": 0,
 					"is_internal_supplier": 0,
-					"ignore_pricing_rule": 1,
 				}
 			)
 			return get_item_details(ctx, pr).get("price_list_rate")
@@ -573,7 +529,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 				child_docname=row_name,
 				is_return=0,
 				is_internal_supplier=0,
-				ignore_pricing_rule=1,
 			)
 
 			out = get_item_details(ctx, pr_doc)
@@ -789,7 +744,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 				"conversion_rate": 1.0,
 				"price_list_currency": "INR",
 				"plc_conversion_rate": 1.0,
-				"ignore_pricing_rule": 1,
 				**fields,
 			}
 		)
@@ -843,34 +797,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 			dn.reload()
 			self.assertEqual(len(get_serial_nos_from_bundle(dn.items[0].serial_and_batch_bundle)), 5)
 
-	def test_supplier_quotation_uses_buying_price_list_exchange_rate(self):
-		for exchange_rate, for_buying in ((90, 1), (95, 0)):
-			frappe.get_doc(
-				{
-					"doctype": "Currency Exchange",
-					"date": today(),
-					"from_currency": "EUR",
-					"to_currency": "INR",
-					"exchange_rate": exchange_rate,
-					"for_buying": for_buying,
-					"for_selling": not for_buying,
-				}
-			).insert()
-		price_list = frappe.get_doc(
-			{"doctype": "Price List", "price_list_name": "_Test EUR Buying", "currency": "EUR", "buying": 1}
-		).insert()
-
-		details = get_price_list_currency_and_exchange_rate(
-			frappe._dict(
-				doctype="Supplier Quotation",
-				price_list=price_list.name,
-				company="_Test Company",
-				transaction_date=today(),
-			)
-		)
-
-		self.assertEqual(details.plc_conversion_rate, 90)
-
 	def get_bundle_entries(self, bundles):
 		return frappe.get_all(
 			"Serial and Batch Entry", {"parent": ("in", bundles)}, ["serial_no", "batch_no"], order_by="idx"
@@ -899,41 +825,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 			entries = self.get_bundle_entries([dn.items[0].serial_and_batch_bundle])
 			self.assertEqual(len({d.serial_no for d in entries if d.serial_no}), 3)
 			self.assertEqual({d.batch_no for d in entries}, {batches[1]})
-
-	def test_reserved_serial_nos_picked_for_sales_order_delivery(self):
-		from hisaabdari.selling.doctype.sales_order.sales_order import make_delivery_note
-		from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
-
-		item_code, batches = self.make_batched_item_with_stock(
-			[2], has_serial_no=1, serial_no_series="SRV-SN-.#####"
-		)
-
-		with self.change_settings(
-			"Stock Settings",
-			{
-				"pick_serial_and_batch_based_on": "FIFO",
-				"auto_create_serial_and_batch_bundle_for_outward": 1,
-				"enable_stock_reservation": 1,
-				"allow_negative_stock": 0,
-			},
-		):
-			so = make_sales_order(
-				item_code=item_code, warehouse="_Test Warehouse - _TC", qty=2, rate=100, do_not_submit=True
-			)
-			so.reserve_stock = 1
-			so.items[0].reserve_stock = 1
-			so.submit()
-
-			dn = make_delivery_note(so.name)
-			dn.items[0].use_serial_batch_fields = 1
-			dn.items[0].serial_no = None
-			dn.insert()
-			self.assertFalse(dn.items[0].serial_no)
-
-			dn.submit()
-			dn.reload()
-			entries = self.get_bundle_entries([dn.items[0].serial_and_batch_bundle])
-			self.assertEqual(len({d.serial_no for d in entries if d.serial_no}), 2)
 
 	@ERPNextTestSuite.change_settings("Selling Settings", {"allow_multiple_items": 1})
 	def test_rows_of_same_item_get_different_serial_nos(self):
@@ -985,125 +876,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 
 		self.assertEqual(details.stock_qty, 57)
 		self.assertEqual(len(details.serial_no.split()), 57)
-
-	def test_reserved_serial_nos_follow_selected_batch(self):
-		from hisaabdari.selling.doctype.sales_order.sales_order import make_delivery_note
-		from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
-
-		item_code, batches = self.make_batched_item_with_stock(
-			[2, 2], has_serial_no=1, serial_no_series="SRB-SN-.#####"
-		)
-
-		with self.change_settings(
-			"Stock Settings",
-			{
-				"pick_serial_and_batch_based_on": "FIFO",
-				"auto_create_serial_and_batch_bundle_for_outward": 1,
-				"enable_stock_reservation": 1,
-				"allow_negative_stock": 0,
-			},
-		):
-			so = make_sales_order(
-				item_code=item_code, warehouse="_Test Warehouse - _TC", qty=4, rate=100, do_not_submit=True
-			)
-			so.reserve_stock = 1
-			so.items[0].reserve_stock = 1
-			so.submit()
-
-			dn = make_delivery_note(so.name)
-			dn.items[0].update(
-				{"qty": 2, "use_serial_batch_fields": 1, "batch_no": batches[1], "serial_no": None}
-			)
-			dn.insert()
-			dn.submit()
-			dn.reload()
-
-			entries = self.get_bundle_entries([dn.items[0].serial_and_batch_bundle])
-			self.assertEqual([d.batch_no for d in entries], [batches[1], batches[1]])
-
-	def test_item_row_and_product_bundle_get_different_serial_nos(self):
-		from hisaabdari.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
-		from hisaabdari.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		item_code, batches = self.make_batched_item_with_stock(
-			[3], has_serial_no=1, serial_no_series="SPB-SN-.#####"
-		)
-		bundle_item = make_item(properties={"is_stock_item": 0}).name
-		make_product_bundle(bundle_item, [item_code])
-
-		with self.change_settings(
-			"Stock Settings",
-			{
-				"pick_serial_and_batch_based_on": "FIFO",
-				"auto_create_serial_and_batch_bundle_for_outward": 1,
-				"use_serial_batch_fields": 1,
-			},
-		):
-			dn = create_delivery_note(
-				item_code=item_code, qty=1, use_serial_batch_fields=1, do_not_submit=True
-			)
-			first_row = dn.items[0].as_dict()
-			dn.append(
-				"items",
-				{k: v for k, v in first_row.items() if k not in ("name", "idx", "batch_no", "serial_no")}
-				| {"item_code": bundle_item, "item_name": bundle_item},
-			)
-			dn.save()
-			dn.submit()
-			dn.reload()
-
-			bundles = [
-				row.serial_and_batch_bundle
-				for row in dn.items + dn.packed_items
-				if row.serial_and_batch_bundle
-			]
-			picked = [d.serial_no for d in self.get_bundle_entries(bundles)]
-			self.assertEqual(len(picked), 2)
-			self.assertEqual(len(set(picked)), 2)
-
-	def test_apply_price_list_keeps_normalised_transaction_type_for_rows(self):
-		"""A row in `items` must not replace the context's transaction type, which the
-		Pricing Rule query uses as a column name."""
-		from unittest.mock import patch
-
-		from hisaabdari.accounts.doctype.pricing_rule import utils as pricing_rule_utils
-		from hisaabdari.accounts.doctype.pricing_rule.test_pricing_rule import make_pricing_rule
-		from hisaabdari.stock.get_item_details import apply_price_list
-
-		pricing_rule = make_pricing_rule(
-			title="_Test Row Transaction Type Rule", selling=1, discount_percentage=10
-		)
-		self.addCleanup(frappe.delete_doc_if_exists, "Pricing Rule", pricing_rule.name)
-
-		ctx = frappe._dict(
-			doctype="Sales Order",
-			company="_Test Company",
-			customer="_Test Customer",
-			currency="INR",
-			conversion_rate=1.0,
-			price_list="_Test Price List",
-			plc_conversion_rate=1.0,
-			transaction_date=today(),
-			items=[
-				frappe._dict(
-					doctype="Sales Order Item",
-					item_code="_Test Item",
-					qty=1,
-					uom="_Test UOM",
-					conversion_factor=1.0,
-					transaction_type="not_a_column",
-				)
-			],
-		)
-		with patch.object(
-			pricing_rule_utils, "_get_pricing_rules", wraps=pricing_rule_utils._get_pricing_rules
-		) as get_pricing_rules:
-			apply_price_list(ctx)
-
-		self.assertEqual(
-			{call.args[1].transaction_type for call in get_pricing_rules.call_args_list}, {"selling"}
-		)
 
 	def test_price_not_uom_dependent_is_applied_to_item_rows(self):
 		"""An Item Price saved for the stock UOM is scaled to the row UOM unless the Price List
@@ -1177,7 +949,6 @@ class TestGetItemDetail(ERPNextTestSuite):
 				"doctype": "Sales Order",
 				"uom": "_Test UOM 1",
 				"conversion_factor": 10,
-				"ignore_pricing_rule": 1,
 				"qty": 1,
 			}
 		)

@@ -43,6 +43,7 @@ class PurchaseReceiptItem(Document):
 		item_name: DF.Data
 		item_tax_amount: DF.Currency
 		item_tax_rate: DF.Code | None
+		item_tax_template: DF.Link | None
 		landed_cost_voucher_amount: DF.Currency
 		mapped_additional_discount_amount: DF.Currency
 		margin_rate_or_amount: DF.Float

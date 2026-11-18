@@ -12,13 +12,12 @@ from hisaabdari.selling.report.sales_analytics.sales_analytics import execute
 from hisaabdari.tests.utils import ERPNextTestSuite
 
 # Bootstrap masters reused as-is (see hisaabdari/tests/utils.py):
-#   "_Test Customer" -> customer_group "_Test Customer Group", territory "_Test Territory"
+#   "_Test Customer" -> customer_group "_Test Customer Group"
 #   "_Test Supplier" -> supplier_group "_Test Supplier Group" (child of "All Supplier Groups")
 #   Sales Order.order_type defaults to "Sales" (reqd Select field)
 COMPANY = "_Test Company"
 CUSTOMER = "_Test Customer"
 CUSTOMER_GROUP = "_Test Customer Group"
-TERRITORY = "_Test Territory"
 SUPPLIER = "_Test Supplier"
 SUPPLIER_GROUP = "_Test Supplier Group"
 FROM_DATE = "2019-04-01"
@@ -126,19 +125,6 @@ class TestSalesAnalytics(ERPNextTestSuite):
 		self.assertAlmostEqual(rows["All Customer Groups"]["total"], expected, places=2)
 		# Roots of a tree report sit at indent 0.
 		self.assertEqual(rows["All Customer Groups"]["indent"], 0)
-
-	def test_territory_tree_rolls_up_to_root(self):
-		"""tree_type='Territory' exercises the same tree path against the Territory tree."""
-		columns, data, *_ = execute(self._base_filters(tree_type="Territory"))
-
-		self.assertTrue(columns)
-		rows = self._row_by_entity(data)
-		self.assertIn("All Territories", rows)
-		self.assertIn(TERRITORY, rows)
-
-		expected = self._expected_value_total()
-		self.assertAlmostEqual(rows[TERRITORY]["total"], expected, places=2)
-		self.assertAlmostEqual(rows["All Territories"]["total"], expected, places=2)
 
 	def test_order_type_synthetic_tree(self):
 		"""tree_type='Order Type' drives get_teams: distinct order_type rebuilt in Python

@@ -17,6 +17,7 @@ COMPANY_RESTRICTION_EXEMPT_DOCTYPES = frozenset(
 	{
 		"Communication",
 		"Exchange Rate Revaluation",
+		"Payment Reconciliation",
 		"Repost Accounting Ledger",
 		"Repost Item Valuation",
 		"Serial No",

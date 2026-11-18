@@ -14,7 +14,6 @@ from hisaabdari.stock.doctype.serial_and_batch_bundle.test_serial_and_batch_bund
 from hisaabdari.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from hisaabdari.stock.doctype.stock_reconciliation.test_stock_reconciliation import (
 	create_stock_reconciliation,
-	make_plant_dimension,
 )
 from hisaabdari.stock.report.stock_balance.stock_balance import execute as stock_balance
 from hisaabdari.stock.report.stock_ledger.stock_ledger import execute as stock_ledger
@@ -306,86 +305,6 @@ class TestReconciliationBalances(ERPNextTestSuite):
 
 		self.assertReportsMatchLedger(item, 2, 200)
 
-	def receive_into_plant(self, item_code, qty, plant, days_ago=5):
-		receipt = self.receive(item_code, qty, days_ago=days_ago, do_not_save=True)
-		receipt.items[0].to_id_plant = plant
-		receipt.insert()
-		receipt.submit()
-		receipt.load_from_db()
-		return receipt
-
-	def reconcile_plant(self, item_code, qty, plant, days_ago=2, **extra):
-		reconciliation = self.reconcile(item_code, qty, days_ago=days_ago, do_not_save=True, **extra)
-		reconciliation.items[0].id_plant = plant
-		reconciliation.insert()
-		reconciliation.submit()
-		return reconciliation
-
-	def test_reconciliation_of_an_inventory_dimension(self):
-		plant_a, plant_b = make_plant_dimension()
-		item = self.make_stock_item()
-		self.receive_into_plant(item, 10, plant_b)
-		self.reconcile_plant(item, 4, plant_a)
-		self.receive_into_plant(item, 2, plant_a, days_ago=1)
-
-		self.assertReportsMatchLedger(item, 16, 1600)
-		self.assertStockBalance(item, 6, 600, id_plant=[plant_a])
-		self.assertStockBalance(item, 10, 1000, id_plant=[plant_b])
-		self.assertStockLedger(item, 6, 600, id_plant=[plant_a])
-		self.assertStockLedger(item, 10, 1000, id_plant=[plant_b])
-
-		rows = self.get_balance_rows(item, show_dimension_wise_stock=1)
-		self.assertEqual(
-			{row.id_plant: (row.bal_qty, row.bal_val) for row in rows},
-			{plant_a: (6, 600), plant_b: (10, 1000)},
-		)
-
-	def test_opening_reconciliation_of_inventory_dimensions(self):
-		plant_a, plant_b = make_plant_dimension()
-		item = self.make_stock_item()
-		self.reconcile_plant(item, 5, plant_a, days_ago=10, purpose="Opening Stock")
-		self.reconcile_plant(item, 3, plant_b, days_ago=10, purpose="Opening Stock")
-		self.receive_into_plant(item, 2, plant_a, days_ago=1)
-
-		self.assertReportsMatchLedger(item, 10, 1000)
-		self.assertStockBalance(item, 7, 700, id_plant=[plant_a])
-		self.assertStockBalance(item, 3, 300, id_plant=[plant_b])
-		self.assertStockLedger(item, 7, 700, id_plant=[plant_a])
-		self.assertStockLedger(item, 3, 300, id_plant=[plant_b])
-
-	def test_reconciliation_of_an_inventory_dimension_before_the_from_date(self):
-		plant_a, plant_b = make_plant_dimension()
-		item = self.make_stock_item()
-		self.receive_into_plant(item, 10, plant_b, days_ago=10)
-		self.reconcile_plant(item, 4, plant_a, days_ago=6)
-		self.receive_into_plant(item, 2, plant_a, days_ago=1)
-
-		from_date = add_days(today(), -3)
-		self.assertReportsMatchLedger(item, 16, 1600, from_date=from_date)
-		self.assertStockBalance(item, 6, 600, id_plant=[plant_a], from_date=from_date)
-		(row,) = self.get_balance_rows(item, id_plant=[plant_a], from_date=from_date)
-		self.assertEqual((row.opening_qty, row.in_qty), (4, 2))
-		opening = stock_ledger(self.get_filters(item, id_plant=[plant_a], from_date=from_date))[1][0]
-		self.assertEqual((opening["qty_after_transaction"], opening["stock_value"]), (4, 400))
-		self.assertStockLedger(item, 6, 600, id_plant=[plant_a], from_date=from_date)
-
-	def test_reconciliation_of_a_batch_with_an_inventory_dimension(self):
-		plant_a, plant_b = make_plant_dimension()
-		item = self.make_batch_item()
-		batches = {
-			plant: get_batch_from_bundle(
-				self.receive_into_plant(item, 10, plant).items[0].serial_and_batch_bundle
-			)
-			for plant in (plant_a, plant_b)
-		}
-		self.reconcile_plant(item, 4, plant_a, batch_no=batches[plant_a], use_serial_batch_fields=1)
-
-		self.assertReportsMatchLedger(item, 14, 1400)
-		self.assertStockBalance(item, 4, 400, id_plant=[plant_a])
-		self.assertStockBalance(item, 10, 1000, id_plant=[plant_b])
-		self.assertStockLedger(item, 4, 400, id_plant=[plant_a])
-		self.assertStockLedger(item, 10, 1000, id_plant=[plant_b])
-
 	def strand_stock_value(self, item_code, value, warehouse=STORES, **extra):
 		receipt = self.receive(item_code, 10, warehouse=warehouse, days_ago=10, **extra)
 		make_stock_entry(
@@ -462,21 +381,6 @@ class TestReconciliationBalances(ERPNextTestSuite):
 
 		self.assertReportsMatchLedger(item, 0, 0, include_zero_stock_items=1)
 
-	def test_adjustment_entry_with_an_inventory_dimension(self):
-		plant_a, _plant_b = make_plant_dimension()
-		item = self.make_stock_item()
-		self.strand_stock_value(item, 500)
-		frappe.db.set_value("Stock Ledger Entry", {"item_code": item}, "id_plant", plant_a)
-		self.make_adjustment_entry(item, id_plant=plant_a)
-		self.receive(item, 2, days_ago=1)
-
-		self.assertReportsMatchLedger(item, 2, 200)
-		self.assertStockBalance(item, 0, 0, id_plant=[plant_a], include_zero_stock_items=1)
-		self.assertStockLedger(item, 0, 0, id_plant=[plant_a])
-		rows = self.get_balance_rows(item, show_dimension_wise_stock=1, include_zero_stock_items=1)
-		self.assertEqual(sum(row.bal_qty for row in rows), 2)
-		self.assertEqual(sum(row.bal_val for row in rows), 200)
-
 	def close_stock(self, days_ago):
 		from hisaabdari.stock.doctype.stock_closing_entry.stock_closing_entry import (
 			prepare_closing_stock_balance,
@@ -530,24 +434,6 @@ class TestReconciliationBalances(ERPNextTestSuite):
 		self.assertReportsMatchLedger(item, 3, 300, from_date=from_date)
 		(row,) = self.get_balance_rows(item, from_date=from_date)
 		self.assertEqual((row.opening_qty, row.opening_val), (3, 300))
-
-	def test_inventory_dimension_reconciliation_before_a_stock_closing(self):
-		plant_a, plant_b = make_plant_dimension()
-		item = self.make_stock_item()
-		self.receive_into_plant(item, 10, plant_b, days_ago=20)
-		self.reconcile_plant(item, 4, plant_a, days_ago=18)
-		self.close_stock(15)
-		self.receive_into_plant(item, 2, plant_a, days_ago=5)
-
-		from_date = add_days(today(), -10)
-		self.assertReportsMatchLedger(item, 16, 1600, from_date=from_date)
-		self.assertStockBalance(item, 6, 600, id_plant=[plant_a], from_date=from_date)
-		self.assertStockBalance(item, 10, 1000, id_plant=[plant_b], from_date=from_date)
-		rows = self.get_balance_rows(item, show_dimension_wise_stock=1, from_date=from_date)
-		self.assertEqual(
-			{row.id_plant: (row.bal_qty, row.bal_val) for row in rows},
-			{plant_a: (6, 600), plant_b: (10, 1000)},
-		)
 
 	def test_adjustment_entry_before_a_stock_closing(self):
 		item = self.make_stock_item()

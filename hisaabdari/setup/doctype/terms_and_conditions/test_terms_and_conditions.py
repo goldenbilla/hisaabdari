@@ -291,18 +291,6 @@ class TestTermsApplicability(UnitTestCase):
 				with self.assertRaises(frappe.ValidationError):
 					doc.validate()
 
-	def test_pos_profile_and_blanket_order_validate_terms(self):
-		from hisaabdari.accounts.doctype.pos_profile.pos_profile import POSProfile
-		from hisaabdari.manufacturing.doctype.blanket_order.blanket_order import BlanketOrder
-
-		for controller in (POSProfile, BlanketOrder):
-			with self.subTest(controller=controller.__name__), patch("frappe.get_cached_doc") as get_doc:
-				get_doc.return_value = frappe._dict(name="Disabled", disabled=1, selling=1, buying=1)
-				doc = controller.__new__(controller)
-				doc.__dict__.update(tc_name="Disabled", blanket_order_type="Selling")
-				with self.assertRaises(frappe.ValidationError):
-					doc.validate()
-
 	def test_render_rejects_disabled_and_wrong_side_terms(self):
 		for flags, doctype in (
 			({"disabled": 1, "selling": 1, "buying": 1}, "Sales Order"),
@@ -436,11 +424,10 @@ class TestTermsTransactionValidation(IntegrationTestCase):
 		from hisaabdari.controllers.buying_controller import BuyingController
 		from hisaabdari.controllers.selling_controller import SellingController
 		from hisaabdari.controllers.stock_controller import StockController
-		from hisaabdari.controllers.subcontracting_controller import SubcontractingController
 
 		for controller, parent, module, doctype in (
 			(SellingController, StockController, "selling", "Other"),
-			(BuyingController, SubcontractingController, "buying", "Purchase Order"),
+			(BuyingController, StockController, "buying", "Purchase Order"),
 		):
 			for disabled, applicable in ((1, 1), (0, 0), (0, 1)):
 				with self.subTest(module=module, disabled=disabled, applicable=applicable):

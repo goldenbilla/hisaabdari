@@ -873,7 +873,8 @@ class ReceivablePayableReport:
 	def add_user_permission_filters(self):
 		# Party is a dynamic link, so match conditions cannot auto-apply Customer/Supplier user permissions
 		from frappe.core.doctype.user_permission.user_permission import get_user_permissions
-		
+		from frappe.permissions import get_allowed_docs_for_doctype
+
 		user_permissions = get_user_permissions()
 		if not user_permissions:
 			return

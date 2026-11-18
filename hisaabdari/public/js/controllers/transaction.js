@@ -68,6 +68,27 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 			cur_frm.cscript.set_gross_profit(item);
 			cur_frm.cscript.calculate_taxes_and_totals();
 			cur_frm.cscript.calculate_stock_uom_rate(frm, cdt, cdn);
+
+			if (item.item_code && item.rate) {
+				frappe.call({
+					method: "hisaabdari.stock.get_item_details.get_item_tax_template",
+					args: {
+						ctx: {
+							item_code: item.item_code,
+							company: frm.doc.company,
+							base_net_rate: item.base_net_rate,
+							item_tax_template: item.item_tax_template,
+							posting_date: frm.doc.posting_date,
+							bill_date: frm.doc.bill_date,
+							transaction_date: frm.doc.transaction_date,
+						},
+					},
+					callback: function (r) {
+						const item_tax_template = r.message;
+						frappe.model.set_value(cdt, cdn, "item_tax_template", item_tax_template);
+					},
+				});
+			}
 		});
 
 		frappe.ui.form.on(this.frm.cscript.tax_table, "rate", function (frm, cdt, cdn) {
@@ -532,6 +553,7 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 							weight_uom: item.weight_uom,
 							stock_uom: item.stock_uom,
 							cost_center: item.cost_center,
+							item_tax_template: item.item_tax_template,
 							child_doctype: item.doctype,
 							child_docname: item.name,
 							use_serial_batch_fields: item.use_serial_batch_fields,
@@ -551,6 +573,10 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 									) {
 										item["use_serial_batch_fields"] = 1;
 									}
+								},
+								() => {
+									var d = locals[cdt][cdn];
+									me.add_taxes_from_item_tax_template(d.item_tax_rate);
 								},
 								async () => {
 									// for internal customer instead of pricing rule directly apply valuation rate on item
@@ -903,6 +929,7 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 			if (me.frm.doc.company && me.frm.fields_dict.currency) {
 				frappe.run_serially([
 					() => get_party_currency(),
+					() => me.update_item_tax_map(),
 					() => me.apply_default_taxes(),
 					() => set_terms(),
 					() => set_letter_head(),
@@ -1970,6 +1997,80 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 		}
 	}
 
+	update_item_tax_map() {
+		let me = this;
+		let item_codes = [];
+		let item_rates = {};
+		let item_tax_templates = {};
+
+		if (me.frm.doc.is_return && me.frm.doc.return_against) return;
+
+		$.each(this.frm.doc.items || [], function (i, item) {
+			if (item.item_code) {
+				// Use combination of name and item code in case same item is added multiple times
+				item_codes.push([item.item_code, item.name]);
+				item_rates[item.name] = item.base_net_rate;
+				item_tax_templates[item.name] = item.item_tax_template;
+			}
+		});
+
+		if (item_codes.length) {
+			return this.frm.call({
+				method: "hisaabdari.stock.get_item_details.get_item_tax_info",
+				args: {
+					doc: me.frm.doc,
+					tax_category: "",
+					item_codes: item_codes,
+					item_rates: item_rates,
+					item_tax_templates: item_tax_templates,
+				},
+				callback: function (r) {
+					if (!r.exc) {
+						$.each(me.frm.doc.items || [], function (i, item) {
+							if (
+								item.name &&
+								Object.prototype.hasOwnProperty.call(r.message, item.name) &&
+								r.message[item.name].item_tax_template
+							) {
+								item.item_tax_template = r.message[item.name].item_tax_template;
+								item.item_tax_rate = r.message[item.name].item_tax_rate;
+								me.add_taxes_from_item_tax_template(item.item_tax_rate);
+							}
+						});
+					}
+				},
+			});
+		}
+	}
+
+	item_tax_template(doc, cdt, cdn) {
+		var me = this;
+		if (me.frm.updating_party_details) return;
+
+		var item = frappe.get_doc(cdt, cdn);
+
+		if (item.item_tax_template) {
+			return this.frm.call({
+				method: "hisaabdari.stock.get_item_details.get_item_tax_map",
+				args: {
+					doc: me.frm.doc,
+					tax_template: item.item_tax_template,
+					as_json: true,
+				},
+				callback: function (r) {
+					if (!r.exc) {
+						item.item_tax_rate = r.message;
+						me.add_taxes_from_item_tax_template(item.item_tax_rate);
+						me.calculate_taxes_and_totals();
+					}
+				},
+			});
+		} else {
+			item.item_tax_rate = "{}";
+			me.calculate_taxes_and_totals();
+		}
+	}
+
 	is_recurring() {
 		// set default values for recurring documents
 		if (this.frm.doc.is_recurring && this.frm.doc.__islocal) {
@@ -2151,6 +2252,27 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 
 			return {
 				query: "hisaabdari.controllers.queries.get_batch_no",
+				filters: filters,
+			};
+		}
+	}
+
+	set_query_for_item_tax_template(doc, cdt, cdn) {
+		var item = frappe.get_doc(cdt, cdn);
+		if (!item.item_code) {
+			return doc.company ? { filters: { company: doc.company } } : {};
+		} else {
+			let filters = {
+				item_code: item.item_code,
+				valid_from: ["<=", doc.transaction_date || doc.bill_date || doc.posting_date],
+				item_group: item.item_group,
+				base_net_rate: item.base_net_rate,
+				disabled: 0,
+			};
+
+			if (doc.company) filters["company"] = doc.company;
+			return {
+				query: "hisaabdari.controllers.queries.get_tax_template",
 				filters: filters,
 			};
 		}

@@ -80,6 +80,12 @@ hisaabdari.buying = {
 						},
 					};
 				});
+
+				if (this.frm.fields_dict["items"].grid.get_field("item_code")) {
+					this.frm.set_query("item_tax_template", "items", function (doc, cdt, cdn) {
+						return me.set_query_for_item_tax_template(doc, cdt, cdn);
+					});
+				}
 			}
 
 			refresh(doc) {

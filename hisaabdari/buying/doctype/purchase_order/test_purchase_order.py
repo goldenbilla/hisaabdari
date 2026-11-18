@@ -20,11 +20,8 @@ from hisaabdari.buying.doctype.purchase_order.purchase_order import (
 	make_purchase_invoice as make_pi_from_po,
 )
 from hisaabdari.controllers.accounts_controller import InvalidQtyError, update_child_qty_rate
-from hisaabdari.manufacturing.doctype.blanket_order.test_blanket_order import make_blanket_order
-from hisaabdari.stock.doctype.item.item import get_last_purchase_details, make_item_price
+from hisaabdari.stock.doctype.item.item import get_last_purchase_details
 from hisaabdari.stock.doctype.item.test_item import make_item
-from hisaabdari.stock.doctype.material_request.material_request import make_purchase_order
-from hisaabdari.stock.doctype.material_request.test_material_request import make_material_request
 from hisaabdari.stock.doctype.purchase_receipt.purchase_receipt import (
 	make_purchase_invoice as make_pi_from_pr,
 )
@@ -152,77 +149,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		frappe.db.set_value("Item", "_Test Item", "over_billing_allowance", 0)
 		frappe.db.set_single_value("Accounts Settings", "over_billing_allowance", 0)
 
-	@ERPNextTestSuite.change_settings("Stock Settings", {"allow_to_edit_stock_uom_qty_for_purchase": 1})
-	def test_orders_for_parts_of_a_material_request_add_up_to_its_stock_qty(self):
-		item = make_item_with_fractional_box()
-		mr = make_material_request(item_code=item, qty=3, uom="Box", conversion_factor=0.666666667)
-		self.assert_orders_for_parts_add_up(mr.items[0], lambda: make_purchase_order(mr.name))
-
-	@ERPNextTestSuite.change_settings("Stock Settings", {"allow_to_edit_stock_uom_qty_for_purchase": 1})
-	def test_receipts_for_parts_of_a_material_request_add_up_to_its_stock_qty(self):
-		mr = receive_material_request_in_parts()
-		self.assertEqual(
-			mr.items[0].received_qty, flt(mr.items[0].stock_qty, mr.precision("stock_qty", "items"))
-		)
-		self.assertEqual(mr.per_received, 100)
-
-	@ERPNextTestSuite.change_settings("Stock Settings", {"allow_to_edit_stock_uom_qty_for_purchase": 0})
-	def test_receipts_for_parts_of_a_material_request_add_up_to_its_unrounded_stock_qty(self):
-		mr = receive_material_request_in_parts()
-		self.assertEqual(mr.items[0].received_qty, mr.items[0].stock_qty)
-		self.assertEqual(mr.per_received, 100)
-
-	@ERPNextTestSuite.change_settings("Stock Settings", {"allow_to_edit_stock_uom_qty_for_purchase": 0})
-	def test_receipt_of_a_material_request_in_a_whole_number_uom_completes_it(self):
-		item = make_item(
-			properties={
-				"is_stock_item": 1,
-				"stock_uom": "Nos",
-				"uoms": [{"uom": "Box", "conversion_factor": 0.3333}],
-			}
-		).name
-		mr = make_material_request(item_code=item, qty=3, uom="Box", conversion_factor=0.3333)
-		po = make_purchase_order(mr.name)
-		po.supplier = "_Test Supplier"
-		po.submit()
-		make_purchase_receipt(po.name).submit()
-
-		mr.reload()
-		self.assertEqual(mr.items[0].received_qty, mr.items[0].stock_qty)
-		self.assertEqual(mr.per_received, 100)
-
-	@ERPNextTestSuite.change_settings("Stock Settings", {"allow_to_edit_stock_uom_qty_for_purchase": 1})
-	def test_orders_for_parts_of_a_supplier_quotation_add_up_to_its_stock_qty(self):
-		from hisaabdari.buying.doctype.supplier_quotation.supplier_quotation import (
-			make_purchase_order as make_po_from_sq,
-		)
-
-		item = make_item_with_fractional_box()
-		sq = frappe.get_doc(
-			{
-				"doctype": "Supplier Quotation",
-				"supplier": "_Test Supplier",
-				"company": "_Test Company",
-				"items": [
-					{
-						"item_code": item,
-						"qty": 3,
-						"uom": "Box",
-						"rate": 100,
-						"warehouse": "_Test Warehouse - _TC",
-					}
-				],
-			}
-		).insert()
-		sq.submit()
-
-		def make_order():
-			po = make_po_from_sq(sq.name)
-			po.schedule_date = add_days(nowdate(), 1)
-			return po
-
-		self.assert_orders_for_parts_add_up(sq.items[0], make_order)
-
 	@ERPNextTestSuite.change_settings(
 		"Stock Settings",
 		{"allow_to_edit_stock_uom_qty_for_purchase": 1, "allow_to_edit_stock_uom_qty_for_sales": 1},
@@ -281,128 +207,19 @@ class TestPurchaseOrder(ERPNextTestSuite):
 			flt(source_row.stock_qty, source_row.precision("stock_qty")),
 		)
 
-	def test_over_order_allowance_against_material_request(self) -> None:
-		"""Over Order Allowance in Buying Settings must govern PO qty vs MR qty independently
-		from Over Delivery/Receipt Allowance which governs receipt/delivery against a PO."""
-		mr = make_material_request(qty=100)
-		po = make_purchase_order(mr.name)
-		po.supplier = "_Test Supplier"
-		po.items[0].qty = 110  # 10% over the MR qty
-
-		# Without any allowance, submitting should raise an OverAllowanceError
-		from hisaabdari.controllers.status_updater import OverAllowanceError
-
-		frappe.db.set_single_value("Buying Settings", "over_order_allowance", 0)
-		frappe.db.set_single_value("Stock Settings", "over_delivery_receipt_allowance", 0)
-		self.assertRaises(OverAllowanceError, po.submit)
-
-		# Granting 10% in Over Order Allowance (Buying Settings) must allow the submit
-		frappe.db.set_single_value("Buying Settings", "over_order_allowance", 10)
-		po.reload()
-		po.items[0].qty = 110
-		po.submit()
-		self.assertEqual(po.docstatus, 1)
-		po.cancel()
-
-		# Over Delivery/Receipt Allowance must remain independent — changing it must not
-		# affect the MR → PO validation when Over Order Allowance is 0.
-		frappe.db.set_single_value("Buying Settings", "over_order_allowance", 0)
-		frappe.db.set_single_value("Stock Settings", "over_delivery_receipt_allowance", 50)
-
-		mr2 = make_material_request(qty=100)
-		po2 = make_purchase_order(mr2.name)
-		po2.supplier = "_Test Supplier"
-		po2.items[0].qty = 110
-		self.assertRaises(OverAllowanceError, po2.submit)
-
-		# Stock over-delivery role must not bypass over-ordering against Material Request.
-		with self.change_settings(
-			"Stock Settings", {"role_allowed_to_over_deliver_receive": "Stock Manager"}
-		):
-			test_user = frappe.get_doc("User", "test@example.com")
-			test_user.add_roles("Stock Manager")
-
-			mr3 = make_material_request(qty=100)
-			po3 = make_purchase_order(mr3.name)
-			po3.supplier = "_Test Supplier"
-			po3.items[0].qty = 110
-			with self.set_user("test@example.com"):
-				po3.flags.ignore_permissions = True
-				self.assertRaises(OverAllowanceError, po3.submit)
-
-		# cleanup
-		frappe.db.set_single_value("Buying Settings", "over_order_allowance", 0)
-		frappe.db.set_single_value("Stock Settings", "over_delivery_receipt_allowance", 0)
-
-	def test_update_remove_child_linked_to_mr(self):
-		"""Test impact on linked PO and MR on deleting/updating row."""
-		mr = make_material_request(qty=10)
-		po = make_purchase_order(mr.name)
-		po.supplier = "_Test Supplier"
-		po.save()
-		po.submit()
-
-		first_item_of_po = po.get("items")[0]
-		existing_ordered_qty = get_ordered_qty()  # 10
-		existing_requested_qty = get_requested_qty()  # 0
-
-		# decrease ordered qty by 3 (10 -> 7) and add item
-		trans_item = json.dumps(
-			[
-				{
-					"item_code": first_item_of_po.item_code,
-					"rate": first_item_of_po.rate,
-					"qty": 7,
-					"docname": first_item_of_po.name,
-				},
-				{"item_code": "_Test Item 2", "rate": 200, "qty": 2},
-			]
-		)
-		update_child_qty_rate("Purchase Order", trans_item, po.name)
-		mr.reload()
-
-		# requested qty increases as ordered qty decreases
-		self.assertEqual(get_requested_qty(), existing_requested_qty + 3)  # 3
-		self.assertEqual(mr.items[0].ordered_qty, 7)
-
-		self.assertEqual(get_ordered_qty(), existing_ordered_qty - 3)  # 7
-
-		# delete first item linked to Material Request
-		trans_item = json.dumps([{"item_code": "_Test Item 2", "rate": 200, "qty": 2}])
-		update_child_qty_rate("Purchase Order", trans_item, po.name)
-		mr.reload()
-
-		# requested qty increases as ordered qty is 0 (deleted row)
-		self.assertEqual(get_requested_qty(), existing_requested_qty + 10)  # 10
-		self.assertEqual(mr.items[0].ordered_qty, 0)
-
-		# ordered qty decreases as ordered qty is 0 (deleted row)
-		self.assertEqual(get_ordered_qty(), existing_ordered_qty - 10)  # 0
-
 	def test_update_child(self):
-		mr = make_material_request(qty=10)
-		po = make_purchase_order(mr.name)
-		po.supplier = "_Test Supplier"
-		po.items[0].qty = 4
-		po.save()
-		po.submit()
+		po = create_purchase_order(qty=4)
 
 		create_pr_against_po(po.name)
 
 		make_pi_from_po(po.name)
 
 		existing_ordered_qty = get_ordered_qty()
-		existing_requested_qty = get_requested_qty()
 
 		trans_item = json.dumps(
 			[{"item_code": "_Test Item", "rate": 200, "qty": 7, "docname": po.items[0].name}]
 		)
 		update_child_qty_rate("Purchase Order", trans_item, po.name)
-
-		mr.reload()
-		self.assertEqual(mr.items[0].ordered_qty, 7)
-		self.assertEqual(mr.per_ordered, 70)
-		self.assertEqual(get_requested_qty(), existing_requested_qty - 3)
 
 		po.reload()
 		self.assertEqual(po.get("items")[0].rate, 200)
@@ -877,28 +694,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		self.assertFalse(po.items[0].margin_rate_or_amount)
 		self.assertEqual(po.items[0].rate, 0)
 
-	def test_rate_pricing_rule_drops_last_purchase_discount_amount(self):
-		from hisaabdari.accounts.doctype.pricing_rule.test_pricing_rule import make_pricing_rule
-
-		item = make_item("_Test Last Purchase Discount Amount", {"is_stock_item": 1}).name
-		make_fully_discounted_purchase_order(item)
-		make_item_price(item, "Standard Buying", 0)
-		make_pricing_rule(item_code=item, buying=1, rate_or_discount="Rate", rate=50)
-
-		details = get_purchase_order_item_details(item)
-
-		self.assertEqual(details.price_list_rate, 50)
-		self.assertEqual(details.discount_amount, 0)
-
-	@ERPNextTestSuite.change_settings("Buying Settings", {"allow_multiple_items": 0})
-	def test_same_item_from_different_material_requests(self):
-		po = make_purchase_order(make_material_request(qty=5).name)
-		po = make_purchase_order(make_material_request(qty=5).name, target_doc=po)
-		po.supplier = "_Test Supplier"
-		po.insert()
-
-		self.assertEqual(len({row.material_request for row in po.items}), 2)
-
 	def test_update_qty(self):
 		po = create_purchase_order()
 
@@ -1013,7 +808,7 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		self.assertEqual(len(pi.get("items", [])), 1)
 
 	def test_purchase_order_on_hold(self):
-		po = create_purchase_order(item_code="_Test Product Bundle Item")
+		po = create_purchase_order()
 		po.db_set("Status", "On Hold")
 		pi = make_pi_from_po(po.name)
 		pr = make_purchase_receipt(po.name)
@@ -1061,42 +856,11 @@ class TestPurchaseOrder(ERPNextTestSuite):
 
 		self.assertRaises(frappe.ValidationError, po.insert)
 
-	def test_subcontracting_finished_good_qty_must_be_whole_number(self):
-		from hisaabdari.controllers.tests.test_subcontracting_controller import (
-			make_bom_for_subcontracted_items,
-			make_raw_materials,
-			make_service_items,
-			make_subcontracted_items,
-		)
-		from hisaabdari.utilities.transaction_base import UOMMustBeIntegerError
-
-		make_subcontracted_items()
-		make_raw_materials()
-		make_service_items()
-		make_bom_for_subcontracted_items()
-
-		po = create_purchase_order(
-			rm_items=[
-				{
-					"warehouse": "_Test Warehouse - _TC",
-					"item_code": "Subcontracted Service Item 1",
-					"qty": 1,
-					"rate": 100,
-					"fg_item": "Subcontracted Item SA1",
-					"fg_item_qty": 2.5,
-				}
-			],
-			is_subcontracted=1,
-			supplier_warehouse="_Test Warehouse 1 - _TC",
-			do_not_save=True,
-		)
-
-		self.assertRaises(UOMMustBeIntegerError, po.insert)
-
 	def test_marginal_min_order_qty_overage_toast(self):
 		original_precision = frappe.db.get_default("float_precision")
 		frappe.db.set_default("float_precision", "3")
 		self.addCleanup(frappe.db.set_default, "float_precision", original_precision)
+		self.addCleanup(frappe.clear_cache)
 
 		if not frappe.db.exists("UOM", "Gram"):
 			frappe.get_doc({"doctype": "UOM", "uom_name": "Gram"}).insert()
@@ -1122,6 +886,7 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		original_precision = frappe.db.get_default("float_precision")
 		frappe.db.set_default("float_precision", "3")
 		self.addCleanup(frappe.db.set_default, "float_precision", original_precision)
+		self.addCleanup(frappe.clear_cache)
 
 		item = make_item(
 			properties={"min_order_qty": 1000.5, "stock_uom": "_Test UOM 1"},
@@ -1265,7 +1030,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 				"doctype": "Purchase Order",
 				"company": "_Test Company",
 				"supplier": "_Test Supplier",
-				"is_subcontracted": 0,
 				"schedule_date": add_days(nowdate(), 1),
 				"currency": frappe.get_cached_value("Company", "_Test Company", "default_currency"),
 				"conversion_factor": 1,
@@ -1520,48 +1284,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		po.save()
 		self.assertEqual(po.schedule_date, add_days(nowdate(), 2))
 
-	def test_po_optional_blanket_order(self):
-		"""
-		Expected result: Blanket order Ordered Quantity should only be affected on Purchase Order with against_blanket_order = 1.
-		Second Purchase Order should not add on to Blanket Orders Ordered Quantity.
-		"""
-
-		make_blanket_order(blanket_order_type="Purchasing", quantity=10, rate=10)
-
-		po = create_purchase_order(item_code="_Test Item", qty=5, against_blanket_order=1)
-		po_doc = frappe.get_doc("Purchase Order", po.get("name"))
-		# To test if the PO has a Blanket Order
-		self.assertTrue(po_doc.items[0].blanket_order)
-
-		po = create_purchase_order(item_code="_Test Item", qty=5, against_blanket_order=0)
-		po_doc = frappe.get_doc("Purchase Order", po.get("name"))
-		# To test if the PO does NOT have a Blanket Order
-		self.assertEqual(po_doc.items[0].blanket_order, None)
-
-	def test_blanket_order_on_po_close_and_open(self):
-		# Step - 1: Create Blanket Order
-		bo = make_blanket_order(blanket_order_type="Purchasing", quantity=10, rate=10)
-
-		# Step - 2: Create Purchase Order
-		po = create_purchase_order(
-			item_code="_Test Item", qty=5, against_blanket_order=1, against_blanket=bo.name
-		)
-
-		bo.load_from_db()
-		self.assertEqual(bo.items[0].ordered_qty, 5)
-
-		# Step - 3: Close Purchase Order
-		po.update_status("Closed")
-
-		bo.load_from_db()
-		self.assertEqual(bo.items[0].ordered_qty, 0)
-
-		# Step - 4: Re-Open Purchase Order
-		po.update_status("Re-open")
-
-		bo.load_from_db()
-		self.assertEqual(bo.items[0].ordered_qty, 5)
-
 	@ERPNextTestSuite.change_settings("Accounts Settings", {"automatically_fetch_payment_terms": 1})
 	def test_payment_terms_are_fetched_when_creating_purchase_invoice(self):
 		from hisaabdari.accounts.doctype.payment_entry.test_payment_entry import (
@@ -1606,13 +1328,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 			company="_Test Company with perpetual inventory",
 		)
 
-		mr = make_material_request(
-			qty=2,
-			company="_Test Company with perpetual inventory",
-			warehouse="Stores - TCP1",
-			cost_center="_Test Cost Center for perpetual inventory Account - TCP1",
-		)
-
 		po = create_purchase_order(
 			company="_Test Company with perpetual inventory",
 			supplier=supplier,
@@ -1620,8 +1335,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 			from_warehouse="_Test Internal Warehouse New 1 - TCP1",
 			qty=2,
 			rate=1,
-			material_request=mr.name,
-			material_request_item=mr.items[0].name,
 		)
 
 		so = make_inter_company_sales_order(po.name)
@@ -1657,262 +1370,9 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		self.assertTrue(pi.items[0].purchase_order)
 		self.assertTrue(pi.items[0].po_detail)
 		pi.submit()
-		mr.reload()
 
 		po.load_from_db()
 		self.assertEqual(po.status, "Completed")
-		self.assertEqual(mr.status, "Received")
-
-	def test_variant_item_po(self):
-		po = create_purchase_order(item_code="_Test Variant Item", qty=1, rate=100, do_not_save=1)
-
-		self.assertRaises(frappe.ValidationError, po.save)
-
-	def test_update_items_for_subcontracting_purchase_order(self):
-		from hisaabdari.controllers.tests.test_subcontracting_controller import (
-			get_subcontracting_order,
-			make_bom_for_subcontracted_items,
-			make_raw_materials,
-			make_service_items,
-			make_subcontracted_items,
-		)
-
-		def update_items(po, qty):
-			trans_items = [po.items[0].as_dict().update({"docname": po.items[0].name})]
-			trans_items[0]["qty"] = qty
-			trans_items[0]["fg_item_qty"] = qty
-			trans_items = json.dumps(trans_items, default=str)
-
-			return update_child_qty_rate(
-				po.doctype,
-				trans_items,
-				po.name,
-			)
-
-		make_subcontracted_items()
-		make_raw_materials()
-		make_service_items()
-		make_bom_for_subcontracted_items()
-
-		service_items = [
-			{
-				"warehouse": "_Test Warehouse - _TC",
-				"item_code": "Subcontracted Service Item 7",
-				"qty": 10,
-				"rate": 100,
-				"fg_item": "Subcontracted Item SA7",
-				"fg_item_qty": 10,
-			},
-		]
-		po = create_purchase_order(
-			rm_items=service_items,
-			is_subcontracted=1,
-			supplier_warehouse="_Test Warehouse 1 - _TC",
-		)
-
-		update_items(po, qty=20)
-		po.reload()
-
-		# Test - 1: Items should be updated as there is no Subcontracting Order against PO
-		self.assertEqual(po.items[0].qty, 20)
-		self.assertEqual(po.items[0].fg_item_qty, 20)
-
-		sco = get_subcontracting_order(po_name=po.name, warehouse="_Test Warehouse - _TC")
-
-		# Test - 2: ValidationError should be raised as there is Subcontracting Order against PO
-		self.assertRaises(frappe.ValidationError, update_items, po=po, qty=30)
-
-		sco.reload()
-		sco.cancel()
-		po.reload()
-
-		update_items(po, qty=30)
-		po.reload()
-
-		# Test - 3: Items should be updated as the Subcontracting Order is cancelled
-		self.assertEqual(po.items[0].qty, 30)
-		self.assertEqual(po.items[0].fg_item_qty, 30)
-
-	def test_update_items_adds_variant_fg_item_without_bom(self):
-		from hisaabdari.controllers.tests.test_subcontracting_controller import (
-			make_bom_for_subcontracted_items,
-			make_raw_materials,
-			make_service_items,
-			make_subcontracted_items,
-		)
-		from hisaabdari.subcontracting.doctype.subcontracting_order.test_subcontracting_order import (
-			make_subcontracted_variant,
-		)
-
-		make_subcontracted_items()
-		make_raw_materials()
-		make_service_items()
-		make_bom_for_subcontracted_items()
-		variant, _ = make_subcontracted_variant()
-		po = create_purchase_order(
-			rm_items=[
-				{
-					"warehouse": "_Test Warehouse - _TC",
-					"item_code": "Subcontracted Service Item 7",
-					"qty": 10,
-					"rate": 100,
-					"fg_item": "Subcontracted Item SA7",
-					"fg_item_qty": 10,
-				},
-			],
-			is_subcontracted=1,
-			supplier_warehouse="_Test Warehouse 1 - _TC",
-		)
-		trans_items = [
-			{
-				"docname": po.items[0].name,
-				"item_code": po.items[0].item_code,
-				"qty": 10,
-				"rate": 100,
-				"fg_item_qty": 10,
-			},
-			{
-				"item_code": "Subcontracted Service Item 7",
-				"warehouse": "_Test Warehouse - _TC",
-				"qty": 5,
-				"rate": 100,
-				"fg_item": variant.name,
-				"fg_item_qty": 5,
-			},
-		]
-
-		update_child_qty_rate(po.doctype, json.dumps(trans_items), po.name)
-
-		po.reload()
-		self.assertEqual(po.items[1].fg_item, variant.name)
-
-	def test_new_sc_flow(self):
-		from hisaabdari.buying.doctype.purchase_order.purchase_order import make_subcontracting_order
-
-		po = create_po_for_sc_testing()
-		sco = make_subcontracting_order(po.name)
-
-		sco.items[0].qty = 5
-		sco.items.pop(1)
-		sco.items[1].qty = 25
-		sco.save()
-		sco.submit()
-
-		# Test - 1: Quantity of Service Items should change based on change in Quantity of its corresponding Finished Goods Item
-		self.assertEqual(sco.service_items[0].qty, 5)
-
-		# Test - 2: Subcontracted Quantity for the PO Items of each line item should be updated accordingly
-		po.reload()
-		self.assertEqual(po.items[0].subcontracted_qty, 5)
-		self.assertEqual(po.items[1].subcontracted_qty, 0)
-		self.assertEqual(po.items[2].subcontracted_qty, 12.5)
-
-		# Test - 3: Amount for both FG Item and its Service Item should be updated correctly based on change in Quantity
-		self.assertEqual(sco.items[0].amount, 2000)
-		self.assertEqual(sco.service_items[0].amount, 500)
-
-		# Test - 4: Service Items should be removed if its corresponding Finished Good line item is deleted
-		self.assertEqual(len(sco.service_items), 2)
-
-		# Test - 5: Service Item quantity calculation should be based upon conversion factor calculated from its corresponding PO Item
-		self.assertEqual(sco.service_items[1].qty, 12.5)
-
-		sco = make_subcontracting_order(po.name)
-
-		sco.items[0].qty = 6
-
-		# Test - 6: Saving document should not be allowed if Quantity exceeds available Subcontracting Quantity of any Purchase Order Item
-		self.assertRaises(frappe.ValidationError, sco.save)
-
-		sco.items[0].qty = 5
-		sco.items.pop()
-		sco.items.pop()
-		sco.save()
-		sco.submit()
-
-		sco = make_subcontracting_order(po.name)
-
-		# Test - 7: Since line item 1 is now fully subcontracted, new SCO should by default only have the remaining 2 line items
-		self.assertEqual(len(sco.items), 2)
-
-		sco.items.pop(0)
-		sco.save()
-		sco.submit()
-
-		# Test - 8: Subcontracted Quantity for each PO Item should be subtracted if SCO gets cancelled
-		po.reload()
-		self.assertEqual(po.items[2].subcontracted_qty, 25)
-		sco.cancel()
-		po.reload()
-		self.assertEqual(po.items[2].subcontracted_qty, 12.5)
-
-		sco = make_subcontracting_order(po.name)
-		sco.save()
-		sco.submit()
-
-		# Test - 8: Since this PO is now fully subcontracted, creating a new SCO from it should throw error
-		self.assertRaises(frappe.ValidationError, make_subcontracting_order, po.name)
-
-	@ERPNextTestSuite.change_settings("Buying Settings", {"auto_create_subcontracting_order": 1})
-	def test_auto_create_subcontracting_order(self):
-		from hisaabdari.controllers.tests.test_subcontracting_controller import (
-			make_bom_for_subcontracted_items,
-			make_raw_materials,
-			make_service_items,
-			make_subcontracted_items,
-		)
-
-		make_subcontracted_items()
-		make_raw_materials()
-		make_service_items()
-		make_bom_for_subcontracted_items()
-
-		service_items = [
-			{
-				"warehouse": "_Test Warehouse - _TC",
-				"item_code": "Subcontracted Service Item 7",
-				"qty": 10,
-				"rate": 100,
-				"fg_item": "Subcontracted Item SA7",
-				"fg_item_qty": 10,
-			},
-		]
-		po = create_purchase_order(
-			rm_items=service_items,
-			is_subcontracted=1,
-			supplier_warehouse="_Test Warehouse 1 - _TC",
-		)
-
-		self.assertTrue(frappe.db.get_value("Subcontracting Order", {"purchase_order": po.name}))
-
-	def test_purchase_order_advance_payment_status(self):
-		frappe.flags.is_reverse_depr_entry = False
-		from hisaabdari.accounts.doctype.payment_entry.test_payment_entry import get_payment_entry
-		from hisaabdari.accounts.doctype.payment_request.payment_request import make_payment_request
-
-		po = create_purchase_order()
-		self.assertEqual(frappe.db.get_value(po.doctype, po.name, "advance_payment_status"), "Not Initiated")
-
-		pr = make_payment_request(
-			dt=po.doctype, dn=po.name, submit_doc=True, return_doc=True, payment_request_type="Outward"
-		)
-
-		po.reload()
-		self.assertEqual(frappe.db.get_value(po.doctype, po.name, "advance_payment_status"), "Initiated")
-
-		pe = get_payment_entry(po.doctype, po.name).save().submit()
-
-		pr.reload()
-		self.assertEqual(pr.status, "Paid")
-		self.assertEqual(frappe.db.get_value(po.doctype, po.name, "advance_payment_status"), "Fully Paid")
-
-		pe.reload()
-		pe.cancel()
-		self.assertEqual(frappe.db.get_value(po.doctype, po.name, "advance_payment_status"), "Initiated")
-
-		pr.reload()
-		pr.cancel()
-		self.assertEqual(frappe.db.get_value(po.doctype, po.name, "advance_payment_status"), "Not Initiated")
 
 	def test_po_billed_amount_against_return_entry(self):
 		from hisaabdari.accounts.doctype.purchase_invoice.purchase_invoice import make_debit_note
@@ -2259,52 +1719,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 			purchase_order.name,
 		)
 
-	def test_cancelling_subcontracted_po_keeps_material_request_ordered_qty_in_fg(self):
-		from hisaabdari.controllers.tests.test_subcontracting_controller import (
-			make_bom_for_subcontracted_items,
-			make_raw_materials,
-			make_service_items,
-			make_subcontracted_items,
-		)
-		from hisaabdari.stock.doctype.material_request.test_material_request import make_material_request
-
-		make_subcontracted_items()
-		make_raw_materials()
-		make_service_items()
-		make_bom_for_subcontracted_items()
-		material_request = make_material_request(
-			item_code="Subcontracted Item SA1", qty=10, material_request_type="Subcontracting"
-		)
-
-		def make_subcontracted_po():
-			po = create_purchase_order(
-				rm_items=[
-					{
-						"warehouse": "_Test Warehouse - _TC",
-						"item_code": "Subcontracted Service Item 1",
-						"qty": 20,
-						"rate": 100,
-						"fg_item": "Subcontracted Item SA1",
-						"fg_item_qty": 5,
-					}
-				],
-				is_subcontracted=1,
-				supplier_warehouse="_Test Warehouse 1 - _TC",
-				do_not_save=True,
-			)
-			po.items[0].material_request = material_request.name
-			po.items[0].material_request_item = material_request.items[0].name
-			po.insert()
-			po.submit()
-			return po
-
-		make_subcontracted_po()
-		frappe.get_doc("Purchase Order", make_subcontracted_po().name).cancel()
-
-		self.assertEqual(
-			frappe.db.get_value("Material Request Item", material_request.items[0].name, "ordered_qty"), 5
-		)
-
 	def test_internal_sales_order_links_back_to_purchase_order(self):
 		po = make_internal_purchase_order()
 
@@ -2429,61 +1843,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		update_status("On Hold", po.name)
 		self.assertEqual(frappe.db.get_value("Purchase Order", po.name, "status"), "On Hold")
 
-	def test_subcontracting_order_takes_warehouse_from_its_own_po_row(self):
-		from hisaabdari.buying.doctype.purchase_order.purchase_order import make_subcontracting_order
-
-		po = create_subcontracted_po()
-		sco = make_subcontracting_order(po.name)
-		sco.items.pop(1)
-		sco.save()
-		sco.submit()
-
-		sco = make_subcontracting_order(po.name)
-		self.assertEqual(
-			[(row.item_code, row.warehouse) for row in sco.items],
-			[("Subcontracted Item SA2", "_Test Warehouse 2 - _TC")],
-		)
-
-	def test_subcontracting_order_skips_closed_rows_and_closed_pos(self):
-		from hisaabdari.buying.doctype.purchase_order.purchase_order import (
-			make_subcontracting_order,
-			update_status,
-		)
-
-		po = create_subcontracted_po()
-		sco = make_subcontracting_order(po.name)
-
-		update_status("Closed", po.name)
-		self.assertRaises(frappe.ValidationError, sco.save)
-
-	def test_subcontracting_order_qty_is_limited_in_po_uom(self):
-		from hisaabdari.buying.doctype.purchase_order.purchase_order import make_subcontracting_order
-		from hisaabdari.controllers.tests.test_subcontracting_controller import make_service_items
-
-		make_service_items()
-		service_item = frappe.get_doc("Item", "Subcontracted Service Item 1")
-		service_item.append("uoms", {"uom": "Box", "conversion_factor": 12})
-		service_item.save()
-
-		po = create_subcontracted_po(
-			[
-				{
-					"warehouse": "_Test Warehouse - _TC",
-					"item_code": "Subcontracted Service Item 1",
-					"qty": 10,
-					"uom": "Box",
-					"conversion_factor": 12,
-					"rate": 100,
-					"fg_item": "Subcontracted Item SA1",
-					"fg_item_qty": 10,
-				}
-			]
-		)
-		sco = make_subcontracting_order(po.name)
-		sco.items[0].qty = 100
-
-		self.assertRaises(frappe.ValidationError, sco.save)
-
 	def test_drop_ship_delivered_qty_is_converted_to_sales_order_uom(self):
 		from hisaabdari.selling.doctype.sales_order.sales_order import make_purchase_order as make_po_from_so
 		from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
@@ -2548,44 +1907,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 		po.reload()
 		self.assertEqual(po.per_billed, 100)
 		self.assertFalse(make_pi_from_po(po.name).items)
-
-	@ERPNextTestSuite.change_settings("Buying Settings", {"maintain_same_rate": 0})
-	def test_portal_purchase_invoice_skips_zero_qty_rows(self):
-		from frappe.core.doctype.user_permission.test_user_permission import create_user
-
-		from hisaabdari.buying.doctype.purchase_order.purchase_order import make_purchase_invoice_from_portal
-
-		po = create_purchase_order(qty=1, rate=1000, do_not_save=True)
-		po.append(
-			"items",
-			{
-				"item_code": "_Test Item Home Desktop 100",
-				"qty": 1,
-				"rate": 1000,
-				"warehouse": po.items[0].warehouse,
-				"schedule_date": po.items[0].schedule_date,
-			},
-		)
-		po.submit()
-		pi = make_pi_from_po(po.name)
-		pi.items = pi.items[:1]
-		pi.items[0].rate = 400
-		pi.submit()
-
-		user = create_user("portal_pi_supplier@example.com", "Accounts User").name
-		supplier = frappe.get_doc("Supplier", po.supplier)
-		supplier.append("portal_users", {"user": user})
-		supplier.save()
-
-		with self.set_user(user):
-			make_purchase_invoice_from_portal(po.name)
-
-		self.assertEqual(
-			frappe.get_all(
-				"Purchase Invoice Item", {"purchase_order": po.name, "docstatus": 0}, pluck="po_detail"
-			),
-			[po.items[1].name],
-		)
 
 	def test_update_items_refused_on_closed_and_on_hold_po(self):
 		from hisaabdari.buying.doctype.purchase_order.purchase_order import update_status
@@ -2709,92 +2030,6 @@ class TestPurchaseOrder(ERPNextTestSuite):
 			self.assertFalse(source.get_db_value("inter_company_order_reference"))
 
 
-def create_po_for_sc_testing():
-	from hisaabdari.controllers.tests.test_subcontracting_controller import (
-		make_bom_for_subcontracted_items,
-		make_raw_materials,
-		make_service_items,
-		make_subcontracted_items,
-	)
-
-	make_subcontracted_items()
-	make_raw_materials()
-	make_service_items()
-	make_bom_for_subcontracted_items()
-
-	service_items = [
-		{
-			"warehouse": "_Test Warehouse - _TC",
-			"item_code": "Subcontracted Service Item 1",
-			"qty": 10,
-			"rate": 100,
-			"fg_item": "Subcontracted Item SA1",
-			"fg_item_qty": 10,
-		},
-		{
-			"warehouse": "_Test Warehouse - _TC",
-			"item_code": "Subcontracted Service Item 2",
-			"qty": 20,
-			"rate": 25,
-			"fg_item": "Subcontracted Item SA2",
-			"fg_item_qty": 15,
-		},
-		{
-			"warehouse": "_Test Warehouse - _TC",
-			"item_code": "Subcontracted Service Item 3",
-			"qty": 25,
-			"rate": 10,
-			"fg_item": "Subcontracted Item SA3",
-			"fg_item_qty": 50,
-		},
-	]
-
-	return create_purchase_order(
-		rm_items=service_items,
-		is_subcontracted=1,
-		supplier_warehouse="_Test Warehouse 1 - _TC",
-	)
-
-
-def create_subcontracted_po(rm_items=None, **args):
-	from hisaabdari.controllers.tests.test_subcontracting_controller import (
-		make_bom_for_subcontracted_items,
-		make_raw_materials,
-		make_service_items,
-		make_subcontracted_items,
-	)
-
-	make_subcontracted_items()
-	make_raw_materials()
-	make_service_items()
-	make_bom_for_subcontracted_items()
-
-	return create_purchase_order(
-		rm_items=rm_items
-		or [
-			{
-				"warehouse": "_Test Warehouse - _TC",
-				"item_code": "Subcontracted Service Item 1",
-				"qty": 10,
-				"rate": 100,
-				"fg_item": "Subcontracted Item SA1",
-				"fg_item_qty": 10,
-			},
-			{
-				"warehouse": "_Test Warehouse 2 - _TC",
-				"item_code": "Subcontracted Service Item 2",
-				"qty": 20,
-				"rate": 25,
-				"fg_item": "Subcontracted Item SA2",
-				"fg_item_qty": 15,
-			},
-		],
-		is_subcontracted=1,
-		supplier_warehouse="_Test Warehouse 1 - _TC",
-		**args,
-	)
-
-
 def prepare_data_for_internal_transfer():
 	from hisaabdari.accounts.doctype.sales_invoice.test_sales_invoice import create_internal_supplier
 	from hisaabdari.selling.doctype.customer.test_customer import create_internal_customer
@@ -2884,27 +2119,6 @@ def get_same_items():
 	]
 
 
-def get_purchase_order_item_details(item_code):
-	from hisaabdari.stock.get_item_details import get_item_details
-
-	ctx = frappe._dict(
-		{
-			"item_code": item_code,
-			"doctype": "Purchase Order",
-			"company": "_Test Company",
-			"supplier": "_Test Supplier",
-			"transaction_date": nowdate(),
-			"currency": "INR",
-			"conversion_rate": 1.0,
-			"buying_price_list": "Standard Buying",
-			"price_list_currency": "INR",
-			"plc_conversion_rate": 1.0,
-			"qty": 1,
-		}
-	)
-	return get_item_details(ctx, frappe.new_doc("Purchase Order"))
-
-
 def make_fully_discounted_purchase_order(item_code):
 	po = create_purchase_order(item_code=item_code, do_not_save=True)
 	po.items[0].update({"price_list_rate": 39, "discount_amount": 39, "rate": 0})
@@ -2920,10 +2134,8 @@ def create_purchase_order(**args):
 	po.schedule_date = add_days(nowdate(), 1)
 	po.company = args.company or "_Test Company"
 	po.supplier = args.supplier or "_Test Supplier"
-	po.is_subcontracted = args.is_subcontracted or 0
 	po.currency = args.currency or frappe.get_cached_value("Company", po.company, "default_currency")
 	po.conversion_factor = args.conversion_factor or 1
-	po.supplier_warehouse = args.supplier_warehouse or None
 
 	if args.rm_items:
 		for row in args.rm_items:
@@ -2938,11 +2150,6 @@ def create_purchase_order(**args):
 				"qty": args.qty if args.qty is not None else 10,
 				"rate": args.rate or 500,
 				"schedule_date": add_days(nowdate(), 1),
-				"include_exploded_items": args.get("include_exploded_items", 1),
-				"against_blanket_order": args.against_blanket_order,
-				"against_blanket": args.against_blanket,
-				"material_request": args.material_request,
-				"material_request_item": args.material_request_item,
 			},
 		)
 
@@ -2950,11 +2157,6 @@ def create_purchase_order(**args):
 		po.set_missing_values()
 		po.insert()
 		if not args.do_not_submit:
-			if po.is_subcontracted:
-				supp_items = po.get("supplied_items")
-				for d in supp_items:
-					if not d.reserve_warehouse:
-						d.reserve_warehouse = args.warehouse or "_Test Warehouse - _TC"
 			po.submit()
 
 	return po
@@ -2972,10 +2174,6 @@ def get_ordered_qty(item_code="_Test Item", warehouse="_Test Warehouse - _TC"):
 	return flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "ordered_qty"))
 
 
-def get_requested_qty(item_code="_Test Item", warehouse="_Test Warehouse - _TC"):
-	return flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "indented_qty"))
-
-
 def make_sales_order_for_fractional_box():
 	"""Sales Order for 3 of a 2/3 Kg Box UOM that allows fractions, so orders can map the rest of it."""
 	from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
@@ -2991,23 +2189,6 @@ def make_po_for_sales_order_row(sales_order_row):
 
 	selected_items = [{"name": sales_order_row.name, "supplier": "_Test Supplier"}]
 	return make_po_from_so(sales_order_row.parent, selected_items=selected_items)[0]
-
-
-def receive_material_request_in_parts():
-	"""Material Request for 3 fractional Boxes, ordered at once and received one Box at a time."""
-	item = make_item_with_fractional_box()
-	mr = make_material_request(item_code=item, qty=3, uom="Box", conversion_factor=0.666666667)
-	po = make_purchase_order(mr.name)
-	po.supplier = "_Test Supplier"
-	po.submit()
-
-	for _ in range(3):
-		pr = make_purchase_receipt(po.name)
-		pr.items[0].qty = pr.items[0].received_qty = 1
-		pr.submit()
-
-	mr.reload()
-	return mr
 
 
 def make_item_with_fractional_box(uom="Box"):

@@ -17,6 +17,7 @@ from pypika import Order
 import hisaabdari
 from hisaabdari.stock.doctype.company_restriction.company_restriction import get_restriction_criterion
 from hisaabdari.stock.doctype.item.item_search import get_item_search_candidates
+from hisaabdari.stock.get_item_details import ItemDetailsCtx, _get_item_tax_template
 from hisaabdari.stock.utils import get_combine_datetime
 
 
@@ -779,6 +780,68 @@ def get_doctypes_for_closing(doctype, txt, searchfield, start, page_len, filters
 	if txt:
 		doctypes = [d for d in doctypes if txt.lower() in d.lower()]
 	return [(d,) for d in set(doctypes)]
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_tax_template(doctype, txt, searchfield, start, page_len, filters):
+	item_code = filters.get("item_code")
+	item_group = filters.get("item_group")
+	if not isinstance(item_code, str) or not isinstance(item_group, str | None):
+		frappe.throw(_("Invalid Item Code or Item Group"), frappe.PermissionError)
+
+	frappe.has_permission("Item", "read", item_code, throw=True)
+	item_doc = frappe.get_cached_doc("Item", item_code)
+	company = filters.get("company")
+	taxes = item_doc.taxes or []
+
+	while item_group:
+		item_group_doc = frappe.get_cached_doc("Item Group", item_group)
+		taxes += item_group_doc.taxes or []
+		item_group = item_group_doc.parent_item_group
+
+	if not taxes:
+		or_filters = []
+		if txt:
+			search_fields = ["name"]
+
+			tax_template_doc = frappe.get_meta("Item Tax Template")
+
+			if title_field := tax_template_doc.title_field:
+				search_fields.append(title_field)
+			if tax_template_doc.search_fields:
+				search_fields.extend(tax_template_doc.get_search_fields())
+
+			for f in search_fields:
+				or_filters.append([doctype, f.strip(), "like", f"%{txt}%"])
+
+		return frappe.get_list(
+			"Item Tax Template",
+			filters={"disabled": 0, "company": company},
+			or_filters=or_filters,
+			as_list=True,
+		)
+
+	else:
+		valid_from = filters.get("valid_from")
+		valid_from = valid_from[1] if isinstance(valid_from, list) else valid_from
+
+		ctx = ItemDetailsCtx(
+			{
+				"item_code": item_code,
+				"posting_date": valid_from,
+				"company": company,
+				"base_net_rate": filters.get("base_net_rate"),
+			}
+		)
+
+		taxes = _get_item_tax_template(ctx, taxes, for_validate=True)
+		txt = txt.lower()
+		templates = [d for d in set(taxes) if not txt or txt in d.lower()]
+		if not templates:
+			return []
+
+		return frappe.get_list("Item Tax Template", filters={"name": ["in", templates]}, as_list=True)
 
 
 def get_fields(doctype, fields=None):

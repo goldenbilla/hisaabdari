@@ -11,7 +11,6 @@ from hisaabdari.selling.doctype.customer.test_customer import make_customer
 from hisaabdari.selling.doctype.quotation.test_quotation import make_quotation
 from hisaabdari.stock.doctype.company_restriction.company_restriction import CompanyRestrictionError
 from hisaabdari.stock.doctype.item.test_item import make_item
-from hisaabdari.stock.doctype.material_request.test_material_request import make_material_request
 from hisaabdari.tests.utils import ERPNextTestSuite
 
 
@@ -28,10 +27,10 @@ class TestCompanyRestriction(ERPNextTestSuite):
 		item = make_item()
 		self.restrict_to_companies("Item", item.name, ["_Test Company 1"])
 
-		self.assertRaises(CompanyRestrictionError, make_material_request, item_code=item.name)
+		self.assertRaises(CompanyRestrictionError, create_purchase_order, item_code=item.name, do_not_submit=1)
 
 		self.restrict_to_companies("Item", item.name, ["_Test Company 1", "_Test Company"])
-		make_material_request(item_code=item.name)
+		create_purchase_order(item_code=item.name, do_not_submit=1)
 
 	def test_restricted_customer_blocks_transaction_in_other_company(self):
 		customer = make_customer("_Test Company Restricted Customer")
@@ -136,7 +135,7 @@ class TestCompanyRestriction(ERPNextTestSuite):
 
 	def test_unrestricted_item_is_not_blocked(self):
 		item = make_item()
-		make_material_request(item_code=item.name)
+		create_purchase_order(item_code=item.name, do_not_submit=1)
 
 	def test_allowed_companies_is_mandatory_when_restricted(self):
 		item = make_item()
@@ -188,21 +187,6 @@ class TestCompanyRestriction(ERPNextTestSuite):
 			.name
 		)
 
-	def make_party_specific_item(self, customer, item_code):
-		return (
-			frappe.get_doc(
-				{
-					"doctype": "Party Specific Item",
-					"party_type": "Customer",
-					"party": customer,
-					"restrict_based_on": "Item",
-					"based_on_value": item_code,
-				}
-			)
-			.insert()
-			.name
-		)
-
 	def test_item_price_inherits_item_company_restriction(self):
 		restricted = make_item()
 		allowed = make_item()
@@ -232,63 +216,6 @@ class TestCompanyRestriction(ERPNextTestSuite):
 
 		with self.set_user(user):
 			self.assertTrue(frappe.has_permission("Item Price", doc=price))
-
-	def test_dynamic_link_inherits_master_company_restriction(self):
-		item = make_item()
-		restricted = make_customer("_Test Dynamic Link Restricted Customer")
-		allowed = make_customer("_Test Dynamic Link Allowed Customer")
-		self.restrict_to_companies("Customer", restricted, ["_Test Company 1"])
-		records = {
-			customer: self.make_party_specific_item(customer, item.name) for customer in (restricted, allowed)
-		}
-
-		user = self.make_user_with_roles("test_dynamic_link_restriction@example.com", ["System Manager"])
-		self.allow_company(user, "_Test Company")
-
-		with self.set_user(user):
-			visible = frappe.get_list(
-				"Party Specific Item",
-				filters={"name": ("in", list(records.values()))},
-				pluck="party",
-			)
-			self.assertEqual(visible, [allowed])
-
-			self.assertFalse(frappe.has_permission("Party Specific Item", doc=records[restricted]))
-			self.assertTrue(frappe.has_permission("Party Specific Item", doc=records[allowed]))
-
-	def make_lead(self, customer, company=None):
-		return (
-			frappe.get_doc(
-				{"doctype": "Lead", "first_name": "_Test", "customer": customer, "company": company}
-			)
-			.insert()
-			.name
-		)
-
-	def test_optional_company_record_inherits_master_company_restriction(self):
-		restricted = make_customer("_Test Optional Company Restricted Customer")
-		restricted_later = make_customer("_Test Optional Company Restricted Later Customer")
-		allowed = make_customer("_Test Optional Company Allowed Customer")
-		self.restrict_to_companies("Customer", restricted, ["_Test Company 1"])
-		leads = {
-			restricted: self.make_lead(restricted),
-			restricted_later: self.make_lead(restricted_later, "_Test Company"),
-			allowed: self.make_lead(allowed),
-		}
-		self.restrict_to_companies("Customer", restricted_later, ["_Test Company 1"])
-
-		user = self.make_user_with_roles("test_optional_company_restriction@example.com", ["Sales Manager"])
-		self.allow_company(user, "_Test Company")
-
-		with self.set_user(user):
-			visible = frappe.get_list(
-				"Lead", filters={"name": ("in", list(leads.values()))}, pluck="customer"
-			)
-			self.assertEqual(visible, [allowed])
-
-			self.assertFalse(frappe.has_permission("Lead", doc=leads[restricted]))
-			self.assertFalse(frappe.has_permission("Lead", doc=leads[restricted_later]))
-			self.assertTrue(frappe.has_permission("Lead", doc=leads[allowed]))
 
 	def test_transaction_hides_when_master_is_restricted_later(self):
 		customer = make_customer("_Test Restricted Later Quotation Customer")
@@ -365,45 +292,6 @@ class TestCompanyRestriction(ERPNextTestSuite):
 			items = {row[0] for row in self.run_report("stock", "item_prices", {})}
 			self.assertIn(allowed.name, items)
 			self.assertNotIn(restricted.name, items)
-
-	def test_variant_reports_hide_restricted_variants(self):
-		from hisaabdari.controllers.item_variant import create_variant
-
-		template = make_item(properties={"has_variants": 1, "attributes": [{"attribute": "Test Size"}]})
-		restricted = create_variant(template.name, {"Test Size": "Small"}).insert()
-		allowed = create_variant(template.name, {"Test Size": "Large"}).insert()
-		self.restrict_to_companies("Item", restricted.name, ["_Test Company 1"])
-
-		with self.set_user(self.make_report_user()):
-			rows = self.run_report("stock", "item_variant_details", {"item": template.name})
-			self.assertEqual([row["variant_name"] for row in rows], [template.name, allowed.name])
-
-			rows = self.run_report("stock", "item_where_used", {"item": template.name})
-			self.assertEqual([row.related_item for row in rows], [allowed.name])
-
-	def test_variant_details_hides_restricted_templates(self):
-		from hisaabdari.controllers.item_variant import create_variant
-
-		template = make_item(properties={"has_variants": 1, "attributes": [{"attribute": "Test Size"}]})
-		create_variant(template.name, {"Test Size": "Small"}).insert()
-		self.restrict_to_companies("Item", template.name, ["_Test Company 1"])
-
-		with self.set_user(self.make_report_user()):
-			self.assertEqual(self.run_report("stock", "item_variant_details", {"item": template.name}), [])
-
-	def test_bom_search_hides_restricted_product_bundles(self):
-		from hisaabdari.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
-
-		component = make_item()
-		restricted = make_product_bundle(make_item(properties={"is_stock_item": 0}).name, [component.name])
-		allowed = make_product_bundle(make_item(properties={"is_stock_item": 0}).name, [component.name])
-		self.restrict_to_companies("Item", restricted.new_item_code, ["_Test Company 1"])
-
-		with self.set_user(self.make_report_user()):
-			rows = self.run_report(
-				"stock", "bom_search", {"search_sub_assemblies": 0, "item1": component.name}
-			)
-			self.assertEqual([row[0] for row in rows], [allowed.name])
 
 	def test_trial_balance_for_party_hides_restricted_customers(self):
 		from hisaabdari.accounts.utils import get_fiscal_year

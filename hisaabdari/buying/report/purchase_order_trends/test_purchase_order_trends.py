@@ -9,31 +9,11 @@ from frappe.utils import today
 from hisaabdari.accounts.utils import get_fiscal_year
 from hisaabdari.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
 from hisaabdari.buying.report.purchase_order_trends.purchase_order_trends import execute
-from hisaabdari.projects.doctype.project.test_project import make_project
 from hisaabdari.stock.doctype.item.test_item import create_item
 from hisaabdari.tests.utils import ERPNextTestSuite
 
 
 class TestPurchaseOrderTrends(ERPNextTestSuite):
-	def test_based_on_project_leaves_out_rows_without_a_project(self):
-		project = make_project({"project_name": "_Test PO Trends Project"}).name
-		po = create_purchase_order(qty=2, rate=100, transaction_date=today(), do_not_save=True)
-		po.items[0].project = project
-		po.insert().submit()
-		create_purchase_order(qty=3, rate=100, transaction_date=today())
-
-		filters = frappe._dict(
-			{
-				"company": "_Test Company",
-				"fiscal_year": get_fiscal_year(today())[0],
-				"period": "Monthly",
-				"based_on": "Project",
-			}
-		)
-
-		projects = [row[0] for row in execute(filters)[1]]
-		self.assertIn(project, projects)
-		self.assertTrue(all(projects))
 
 	def test_restricted_user_sees_only_permitted_orders(self):
 		item = create_item("_Test PO Trends Permission Item").name

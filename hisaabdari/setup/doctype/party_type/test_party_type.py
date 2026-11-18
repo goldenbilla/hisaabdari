@@ -21,7 +21,7 @@ class TestPartyType(ERPNextTestSuite):
 				).insert()
 				with self.set_user(user.name):
 					party_type = frappe.get_doc(
-						doctype="Party Type", party_type="Sales Partner", account_type="Receivable"
+						doctype="Party Type", party_type="Customer Group", account_type="Receivable"
 					).insert()
 					party_type.account_type = "Payable"
 					party_type.save()
@@ -45,10 +45,10 @@ class TestPartyType(ERPNextTestSuite):
 
 	def test_account_type_cannot_change_after_ledger_entries(self):
 		party_type = frappe.get_doc(
-			doctype="Party Type", party_type="Sales Partner", account_type="Receivable"
+			doctype="Party Type", party_type="Customer Group", account_type="Receivable"
 		).insert()
 		journal = make_journal_entry("Debtors - _TC", "_Test Cash - _TC", 10, save=False)
-		journal.accounts[0].update({"party_type": "Sales Partner", "party": "_Test Sales Partner India - 1"})
+		journal.accounts[0].update({"party_type": "Customer Group", "party": "_Test Customer Group"})
 		journal.insert().submit()
 		self.assertTrue(frappe.db.exists("GL Entry", {"party_type": party_type.name}))
 		party_type.save()

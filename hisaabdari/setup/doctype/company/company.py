@@ -744,9 +744,12 @@ class Company(NestedSet):
 		for template, child in (
 			("Sales Taxes and Charges Template", "Sales Taxes and Charges"),
 			("Purchase Taxes and Charges Template", "Purchase Taxes and Charges"),
+			("Item Tax Template", "Item Tax Template Detail"),
 		):
 			names = frappe.get_all(template, filters={"company": self.name}, pluck="name")
 			if names:
+				if template == "Item Tax Template":
+					frappe.db.delete("Item Tax", {"item_tax_template": ["in", names]})
 				frappe.db.delete(child, {"parent": ["in", names], "parenttype": template})
 				frappe.db.delete(template, {"name": ["in", names]})
 

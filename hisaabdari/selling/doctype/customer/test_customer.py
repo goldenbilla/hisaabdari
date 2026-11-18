@@ -134,10 +134,8 @@ class TestCustomer(ERPNextTestSuite):
 			"contact_department": None,
 			"contact_email": "test_contact_customer@example.com",
 			"contact_mobile": None,
-			"sales_team": [],
 			"contact_display": "_Test Contact for _Test Customer",
 			"contact_person": "_Test Contact for _Test Customer-_Test Customer",
-			"territory": "_Test Territory",
 			"contact_phone": "+91 0000000000",
 			"customer_name": "_Test Customer",
 		}
@@ -154,55 +152,6 @@ class TestCustomer(ERPNextTestSuite):
 				val = None
 
 			self.assertEqual(value, val)
-
-	def test_party_details_tax_category(self):
-		from hisaabdari.accounts.party import _get_party_details
-
-		# Tax Category without Address
-		details = _get_party_details("_Test Customer With Tax Category")
-		self.assertEqual(details.tax_category, "_Test Tax Category 1")
-
-		frappe.get_doc(
-			doctype="Address",
-			address_title="_Test Address With Tax Category",
-			tax_category="_Test Tax Category 2",
-			address_type="Billing",
-			address_line1="Station Road",
-			city="_Test City",
-			country="India",
-			is_primary_address=True,
-			links=[dict(link_doctype="Customer", link_name="_Test Customer With Tax Category")],
-		).insert()
-		frappe.get_doc(
-			doctype="Address",
-			address_title="_Test Address With Tax Category",
-			tax_category="_Test Tax Category 3",
-			address_type="Shipping",
-			address_line1="Station Road",
-			city="_Test City",
-			country="India",
-			is_shipping_address=True,
-			links=[dict(link_doctype="Customer", link_name="_Test Customer With Tax Category")],
-		).insert()
-
-		settings = frappe.get_single("Accounts Settings")
-		rollback_setting = settings.determine_address_tax_category_from
-
-		# Tax Category from Billing Address
-		settings.determine_address_tax_category_from = "Billing Address"
-		settings.save()
-		details = _get_party_details("_Test Customer With Tax Category")
-		self.assertEqual(details.tax_category, "_Test Tax Category 2")
-
-		# Tax Category from Shipping Address
-		settings.determine_address_tax_category_from = "Shipping Address"
-		settings.save()
-		details = _get_party_details("_Test Customer With Tax Category")
-		self.assertEqual(details.tax_category, "_Test Tax Category 3")
-
-		# Rollback
-		settings.determine_address_tax_category_from = rollback_setting
-		settings.save()
 
 	def test_rename(self):
 		# delete communication linked to these 2 customers
@@ -405,7 +354,6 @@ class TestCustomer(ERPNextTestSuite):
 		new_customer = frappe.new_doc("Customer")
 		new_customer.customer_name = "_Test Duplicate Credit Limit"
 		new_customer.customer_group = "_Test Customer Group"
-		new_customer.territory = "_Test Territory"
 		new_customer.append("credit_limits", {"credit_limit": 100, "company": "_Test Company"})
 		new_customer.append("credit_limits", {"credit_limit": 1000000, "company": "_Test Company"})
 		self.assertRaises(frappe.ValidationError, new_customer.insert)
@@ -632,33 +580,6 @@ class TestCustomer(ERPNextTestSuite):
 		self.assertEqual(middle, "Michael")
 		self.assertEqual(last, "Doe")
 
-	def test_portal_user_contact_link(self):
-		user_email = frappe.generate_hash() + "@example.com"
-		user = frappe.new_doc("User")
-		user.email = user_email
-		user.first_name = "Test Portal Customer User"
-		user.send_welcome_email = False
-		user.insert(ignore_permissions=True)
-
-		contact = frappe.new_doc("Contact")
-		contact.first_name = "Test Portal Customer User"
-		contact.add_email(user_email, is_primary=1)
-		contact.links = []
-		contact.insert(ignore_permissions=True)
-
-		customer = frappe.get_doc(
-			{
-				"doctype": "Customer",
-				"customer_name": "Test Portal Contact Customer",
-				"customer_type": "Individual",
-			}
-		)
-		customer.append("portal_users", {"user": user.name})
-		customer.insert()
-
-		contact.reload()
-		self.assertTrue(contact.has_link("Customer", customer.name))
-
 
 def get_customer_dict(customer_name):
 	return {
@@ -666,7 +587,6 @@ def get_customer_dict(customer_name):
 		"customer_name": customer_name,
 		"customer_type": "Individual",
 		"doctype": "Customer",
-		"territory": "_Test Territory",
 	}
 
 
@@ -735,7 +655,6 @@ def create_internal_customer(customer_name=None, represents_company=None, allowe
 				"customer_group": "_Test Customer Group",
 				"customer_name": customer_name,
 				"customer_type": "Individual",
-				"territory": "_Test Territory",
 				"is_internal_customer": 1,
 				"represents_company": represents_company,
 			}

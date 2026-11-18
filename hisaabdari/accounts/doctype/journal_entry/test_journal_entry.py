@@ -405,48 +405,6 @@ class TestJournalEntry(ERPNextTestSuite):
 
 		self.check_gl_entries()
 
-	def test_jv_with_project(self):
-		from hisaabdari.projects.doctype.project.test_project import make_project
-
-		if not frappe.db.exists("Project", {"project_name": "Journal Entry Project"}):
-			project = make_project(
-				{
-					"project_name": "Journal Entry Project",
-					"project_template_name": "Test Project Template",
-					"start_date": "2020-01-01",
-				}
-			)
-			project_name = project.name
-		else:
-			project_name = frappe.get_value("Project", {"project_name": "_Test Project"})
-
-		jv = make_journal_entry("_Test Cash - _TC", "_Test Bank - _TC", 100, save=False)
-		for d in jv.accounts:
-			d.project = project_name
-		jv.voucher_type = "Bank Entry"
-		jv.multi_currency = 0
-		jv.cheque_no = "112233"
-		jv.cheque_date = nowdate()
-		jv.insert()
-		jv.submit()
-
-		self.voucher_no = jv.name
-
-		self.fields = ["account", "project"]
-
-		self.expected_gle = [
-			{
-				"account": "_Test Bank - _TC",
-				"project": project_name,
-			},
-			{
-				"account": "_Test Cash - _TC",
-				"project": project_name,
-			},
-		]
-
-		self.check_gl_entries()
-
 	def make_jv_with_fractional_totals(self):
 		"""0.10 + 0.20 sums to 0.30000000000000004, the residue this guards against."""
 		jv = frappe.new_doc("Journal Entry")
@@ -823,7 +781,6 @@ def make_journal_entry(
 			{
 				"account": account1,
 				"cost_center": cost_center,
-				"project": project,
 				"debit_in_account_currency": amount if amount > 0 else 0,
 				"credit_in_account_currency": abs(amount) if amount < 0 else 0,
 				"exchange_rate": exchange_rate,
@@ -831,7 +788,6 @@ def make_journal_entry(
 			{
 				"account": account2,
 				"cost_center": cost_center,
-				"project": project,
 				"credit_in_account_currency": amount if amount > 0 else 0,
 				"debit_in_account_currency": abs(amount) if amount < 0 else 0,
 				"exchange_rate": exchange_rate,

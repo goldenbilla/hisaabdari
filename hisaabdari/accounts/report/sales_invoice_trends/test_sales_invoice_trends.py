@@ -155,20 +155,6 @@ class TestSalesInvoiceTrends(ERPNextTestSuite):
 		item_total = by_item[-1][labels_by_item.index("Total(Amt)")] if by_item else 0
 		return customer_amount, customer_total, item_total
 
-	def test_based_on_project_excludes_invoices_without_project(self):
-		project = frappe.db.get_value("Project", {"project_name": "_Test Project"})
-		invoice = create_sales_invoice(item="_Test Item", rate=1000, posting_date=POSTING_DATE, do_not_save=1)
-		invoice.project = project
-		invoice.submit()
-		create_sales_invoice(item="_Test Item", rate=4000, posting_date=POSTING_DATE)
-
-		labels, data = self.run_report(based_on="Project")
-		projects = [row[0] for row in data[:-1]]
-		self.assertIn(project, projects)
-		self.assertNotIn(None, projects)
-		self.assertNotIn("", projects)
-		self.assertEqual(data[-1][labels.index("Total(Amt)")], sum(row[-1] for row in data[:-1]))
-
 	def test_item_filter_restricts_rows(self):
 		# the Item filter is applied in the query, so the excluded item never reaches the rows
 		create_sales_invoice(item="_Test Item", qty=4, rate=200, posting_date=POSTING_DATE)

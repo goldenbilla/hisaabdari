@@ -88,37 +88,6 @@ class TestQuotationTrends(ERPNextTestSuite):
 		labels, after = self.run_report(based_on="Customer")
 		self.assertEqual(self._cell(after, "Party", "_Test Customer", amt_col, labels) - before_amt, 300)
 
-	def test_lead_quotation_label_resolves_through_quotation_to(self):
-		"""party_name is a dynamic link, so the label must be resolved via quotation_to.
-
-		Looking the party up in Customer alone leaves a Lead's row blank, and looking in Customer
-		first returns the wrong record when a Lead and a Customer share a name.
-		"""
-		lead_name = "_Test Trends Lead Party"
-		if not frappe.db.exists("Lead", {"lead_name": lead_name}):
-			frappe.get_doc({"doctype": "Lead", "lead_name": lead_name}).insert()
-		lead = frappe.db.get_value("Lead", {"lead_name": lead_name}, ["name", "company_name"], as_dict=True)
-
-		quotation = frappe.new_doc("Quotation")
-		quotation.company = "_Test Company"
-		quotation.transaction_date = TXN_DATE
-		quotation.currency = "INR"
-		quotation.quotation_to = "Lead"
-		quotation.party_name = lead.name
-		quotation.append(
-			"items",
-			{"item_code": "_Test Item", "qty": 1, "rate": 100, "warehouse": "_Test Warehouse - _TC"},
-		)
-		quotation.insert()
-		quotation.submit()
-
-		labels, rows = self.run_report(based_on="Customer")
-		party_idx, name_idx = labels.index("Party"), labels.index("Party Name")
-		lead_rows = [row for row in rows if row[party_idx] == lead.name]
-
-		self.assertEqual(len(lead_rows), 1)
-		self.assertEqual(lead_rows[0][name_idx], lead.company_name or lead_name)
-
 	def test_group_by_chart_matches_table_total_with_mixed_group_sizes(self):
 		# _Test Item is quoted to two customers -> two detail rows under one header row.
 		# _Test Item 2 is quoted to only one customer -> exactly one detail row under its
@@ -211,85 +180,6 @@ class TestQuotationTrends(ERPNextTestSuite):
 
 		self.assertGreater(chart_total, 0)
 		self.assertEqual(chart_total, 300)
-
-	def _make_lead_quotation(self, lead_name, qty, rate):
-		if not frappe.db.exists("Lead", {"lead_name": lead_name}):
-			frappe.get_doc({"doctype": "Lead", "lead_name": lead_name}).insert()
-		lead = frappe.db.get_value("Lead", {"lead_name": lead_name})
-
-		quotation = frappe.new_doc("Quotation")
-		quotation.company = "_Test Company"
-		quotation.transaction_date = TXN_DATE
-		quotation.currency = "INR"
-		quotation.quotation_to = "Lead"
-		quotation.party_name = lead
-		quotation.append(
-			"items",
-			{"item_code": "_Test Item", "qty": qty, "rate": rate, "warehouse": "_Test Warehouse - _TC"},
-		)
-		quotation.insert()
-		quotation.submit()
-
-	def test_group_by_customer_breaks_down_every_party(self):
-		# Group By Customer is a party breakdown: it keeps Lead/Prospect quotations in the item row and
-		# the Total, and its column is a neutral Party column (no Customer link for non-customer rows).
-		make_quotation(
-			item="_Test Item", party_name="_Test Customer", qty=2, rate=100, transaction_date=TXN_DATE
-		)
-		self._make_lead_quotation("_Test Trends GB Lead", qty=7, rate=100)
-
-		filters = frappe._dict(
-			{
-				"company": "_Test Company",
-				"fiscal_year": FISCAL_YEAR,
-				"period": "Yearly",
-				"based_on": "Item",
-				"group_by": "Customer",
-			}
-		)
-		columns, data, _message, chart = execute(filters)
-		total_row = next(row for row in data if row[0] == f"'{_('Total')}'")
-
-		# 200 (customer) + 700 (lead) both counted, and the breakdown reconciles with the chart
-		self.assertEqual(total_row[-1], 900)
-		self.assertEqual(sum(chart["data"]["datasets"][0]["values"]), 900)
-
-		party_column = next(c for c in columns if isinstance(c, dict) and c.get("fieldname") == "party")
-		self.assertEqual(party_column["fieldtype"], "Data")
-
-	def test_based_on_customer_group_labels_non_customer_quotations(self):
-		# A Lead quotation has no customer_group, so it falls under a labelled bucket, not a blank group.
-		make_quotation(
-			item="_Test Item", party_name="_Test Customer", qty=2, rate=100, transaction_date=TXN_DATE
-		)
-		self._make_lead_quotation("_Test Trends Group Lead", qty=7, rate=100)
-
-		labels, rows = self.run_report(based_on="Customer Group")
-		group_idx = labels.index("Customer Group")
-		amt_idx = labels.index(f"{FISCAL_YEAR} (Amt)")
-		data_rows = [row for row in rows if row[0] != f"'{_('Total')}'"]
-
-		self.assertTrue(all(row[group_idx] for row in data_rows))
-		no_group = next(row for row in data_rows if row[group_idx] == _("No Customer Group"))
-		self.assertEqual(no_group[amt_idx], 700)
-		total_row = next(row for row in rows if row[0] == f"'{_('Total')}'")
-		self.assertEqual(total_row[-1], 900)
-
-		# with a secondary Group By the labelled bucket must still break down, so the chart reconciles
-		_columns, data, _message, chart = execute(
-			frappe._dict(
-				{
-					"company": "_Test Company",
-					"fiscal_year": FISCAL_YEAR,
-					"period": "Yearly",
-					"based_on": "Customer Group",
-					"group_by": "Item",
-				}
-			)
-		)
-		grouped_total = next(row for row in data if row[0] == f"'{_('Total')}'")
-		self.assertEqual(grouped_total[-1], 900)
-		self.assertEqual(sum(chart["data"]["datasets"][0]["values"]), 900)
 
 	def test_item_filter_restricts_rows(self):
 		# the Item filter is applied in the query, so the excluded item never reaches the rows

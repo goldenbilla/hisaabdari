@@ -351,7 +351,7 @@ class TestItemSearchIndex(ERPNextTestSuite):
 
 			matched = frappe.get_all(
 				"Item",
-				filters={"name": ("like", f"%{txt}%"), "disabled": 0, "has_variants": 0},
+				filters={"name": ("like", f"%{txt}%"), "disabled": 0},
 				pluck="name",
 			)
 			self.assertTrue(set(matched) <= set(candidates), txt)
@@ -377,7 +377,7 @@ class TestItemSearchIndex(ERPNextTestSuite):
 		self.assertIsNotNone(candidates)
 		matched = frappe.get_all(
 			"Item",
-			filters={"name": ("like", "%_Test Item%"), "disabled": 0, "has_variants": 0},
+			filters={"name": ("like", "%_Test Item%"), "disabled": 0},
 			pluck="name",
 		)
 		self.assertTrue(set(matched) <= set(candidates))

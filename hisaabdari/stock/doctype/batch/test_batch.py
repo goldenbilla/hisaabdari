@@ -20,7 +20,6 @@ from hisaabdari.stock.doctype.serial_and_batch_bundle.test_serial_and_batch_bund
 )
 from hisaabdari.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from hisaabdari.stock.get_item_details import ItemDetailsCtx, get_item_details
-from hisaabdari.stock.report.stock_qty_vs_batch_qty.stock_qty_vs_batch_qty import execute, update_batch_qty
 from hisaabdari.stock.serial_batch_bundle import SerialBatchCreation
 from hisaabdari.tests.permission_test_utils import as_user, make_fenced_user
 from hisaabdari.tests.utils import ERPNextTestSuite
@@ -124,162 +123,6 @@ class TestBatch(ERPNextTestSuite):
 		batches = get_batch_qty(batch_no)
 		for d in batches:
 			self.assertEqual(d.qty, batchwise_qty[(d.batch_no, d.warehouse)])
-
-	def test_batch_qty_on_pos_creation(self):
-		from hisaabdari.accounts.doctype.pos_closing_entry.test_pos_closing_entry import (
-			init_user_and_profile,
-		)
-		from hisaabdari.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
-		from hisaabdari.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
-		from hisaabdari.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
-			get_auto_batch_nos,
-		)
-		from hisaabdari.stock.doctype.stock_reconciliation.test_stock_reconciliation import (
-			create_batch_item_with_batch,
-		)
-
-		invoice_type = frappe.db.get_single_value("POS Settings", "invoice_type")
-		session_user = frappe.session.user
-
-		try:
-			# Set invoice type to POS Invoice
-			frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
-
-			# Create batch item
-			create_batch_item_with_batch("_Test BATCH ITEM", "TestBatch-RS 02")
-
-			# Create stock entry
-			se = make_stock_entry(
-				target="_Test Warehouse - _TC",
-				item_code="_Test BATCH ITEM",
-				qty=30,
-				basic_rate=100,
-			)
-
-			se.reload()
-
-			batch_no = get_batch_from_bundle(se.items[0].serial_and_batch_bundle)
-
-			# Create opening entry
-			session_user = frappe.session.user
-			test_user, pos_profile = init_user_and_profile()
-			create_opening_entry(pos_profile, test_user.name)
-
-			# POS Invoice 1, for the batch without bundle
-			pos_inv1 = create_pos_invoice(item="_Test BATCH ITEM", rate=300, qty=15, do_not_save=1)
-			pos_inv1.append(
-				"payments",
-				{"mode_of_payment": "Cash", "amount": 4500},
-			)
-			pos_inv1.items[0].batch_no = batch_no
-			pos_inv1.save()
-			pos_inv1.submit()
-			pos_inv1.reload()
-
-			# Get auto batch nos after pos invoice
-			batches = get_auto_batch_nos(
-				frappe._dict(
-					{
-						"item_code": "_Test BATCH ITEM",
-						"warehouse": "_Test Warehouse - _TC",
-						"for_stock_levels": True,
-						"ignore_reserved_stock": True,
-					}
-				)
-			)
-
-			# Check batch qty after pos invoice
-			row = _find_batch_row(batches, batch_no, "_Test Warehouse - _TC")
-			self.assertIsNotNone(row)
-			self.assertEqual(row.qty, 30)
-
-		finally:
-			# Set invoice type to Sales Invoice
-			frappe.db.set_single_value("POS Settings", "invoice_type", invoice_type)
-			# Set user to session user
-			frappe.set_user(session_user)
-
-	def test_pos_reserved_batch_qty_of_other_warehouse_is_ignored(self):
-		from hisaabdari.accounts.doctype.pos_closing_entry.test_pos_closing_entry import (
-			init_user_and_profile,
-		)
-		from hisaabdari.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
-		from hisaabdari.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
-		from hisaabdari.stock.doctype.stock_reconciliation.test_stock_reconciliation import (
-			create_batch_item_with_batch,
-		)
-
-		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
-		item_code = "_Test POS Batch Warehouse Item"
-		batch_no = "TestBatch-POS-WH 01"
-		create_batch_item_with_batch(item_code, batch_no)
-		for warehouse, qty in (("_Test Warehouse 1 - _TC", 3), ("_Test Warehouse - _TC", 7)):
-			make_stock_entry(
-				target=warehouse,
-				item_code=item_code,
-				qty=qty,
-				basic_rate=100,
-				batch_no=batch_no,
-				use_serial_batch_fields=1,
-			)
-
-		session_user = frappe.session.user
-		test_user, pos_profile = init_user_and_profile()
-		create_opening_entry(pos_profile, test_user.name)
-		pos_inv = create_pos_invoice(
-			item=item_code, rate=300, qty=2, warehouse="_Test Warehouse - _TC", do_not_save=1
-		)
-		pos_inv.append("payments", {"mode_of_payment": "Cash", "amount": 600})
-		pos_inv.items[0].use_serial_batch_fields = 1
-		pos_inv.items[0].batch_no = batch_no
-		pos_inv.submit()
-		frappe.set_user(session_user)
-
-		batches = get_batch_qty(
-			item_code=item_code, warehouse="_Test Warehouse 1 - _TC", consider_negative_batches=1
-		)
-		self.assertEqual(
-			[(d.batch_no, d.warehouse, d.qty) for d in batches], [(batch_no, "_Test Warehouse 1 - _TC", 3)]
-		)
-
-	@ERPNextTestSuite.change_settings("Stock Settings", {"use_serial_batch_fields": 0})
-	def test_pos_reserved_bundle_qty_of_other_batch_is_ignored(self):
-		from hisaabdari.accounts.doctype.pos_closing_entry.test_pos_closing_entry import (
-			init_user_and_profile,
-		)
-		from hisaabdari.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
-		from hisaabdari.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
-		from hisaabdari.stock.doctype.stock_reconciliation.test_stock_reconciliation import (
-			create_batch_item_with_batch,
-		)
-
-		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
-		item_code = "_Test POS Batch Bundle Item"
-		batch_1 = "TestBatch-POS-SABB 01"
-		create_batch_item_with_batch(item_code, batch_1)
-		batch_2 = "TestBatch-POS-SABB 02"
-		create_batch_item_with_batch(item_code, batch_2)
-		for batch_no in (batch_1, batch_2):
-			make_stock_entry(
-				target="_Test Warehouse - _TC",
-				item_code=item_code,
-				qty=5,
-				basic_rate=100,
-				batch_no=batch_no,
-				use_serial_batch_fields=1,
-			)
-
-		session_user = frappe.session.user
-		test_user, pos_profile = init_user_and_profile()
-		create_opening_entry(pos_profile, test_user.name)
-		pos_inv = create_pos_invoice(item=item_code, rate=300, qty=2, do_not_save=1)
-		pos_inv.append("payments", {"mode_of_payment": "Cash", "amount": 600})
-		pos_inv.items[0].batch_no = batch_2
-		pos_inv.submit()
-		frappe.set_user(session_user)
-
-		batches = get_batch_qty(batch_no=batch_1, item_code=item_code, consider_negative_batches=1)
-		self.assertEqual([(d.batch_no, d.qty) for d in batches], [(batch_1, 5)])
 
 	def test_stock_entry_incoming(self):
 		"""Test batch creation via Stock Entry (Work Order)"""
@@ -482,7 +325,7 @@ class TestBatch(ERPNextTestSuite):
 	def test_batch_stock_endpoints_need_batch_access(self):
 		from frappe.core.doctype.user_permission.test_user_permission import create_user
 
-		from hisaabdari.stock.doctype.batch.batch import get_batches_by_oldest, get_pos_reserved_batch_qty
+		from hisaabdari.stock.doctype.batch.batch import get_batches_by_oldest
 
 		portal_user = create_user("test_batch_portal@example.com", "Customer")
 		sales_user = create_user("test_batch_sales@example.com", "Sales User")
@@ -492,7 +335,6 @@ class TestBatch(ERPNextTestSuite):
 		try:
 			self.assertRaises(frappe.PermissionError, get_batch_qty, **kwargs)
 			self.assertRaises(frappe.PermissionError, get_batches_by_oldest, **kwargs)
-			self.assertRaises(frappe.PermissionError, get_pos_reserved_batch_qty, kwargs)
 
 			frappe.set_user(sales_user.name)
 			get_batch_qty(**kwargs)
@@ -522,25 +364,6 @@ class TestBatch(ERPNextTestSuite):
 			)
 			batch.recalculate_batch_qty()
 			self.assertEqual(batch.reload().batch_qty, 10)
-
-	def test_warehouse_restricted_user_updates_total_batch_qty(self):
-		item = make_item(properties={"has_batch_no": 1, "create_new_batch": 1})
-		batch = frappe.get_doc(doctype="Batch", item=item.name).insert()
-		make_stock_entry(item_code=item.name, batch_no=batch.name, qty=10, target="Stores - _TC", rate=100)
-		make_stock_entry(
-			item_code=item.name, batch_no=batch.name, qty=5, target="Finished Goods - _TC", rate=100
-		)
-		frappe.db.set_value("Batch", batch.name, "batch_qty", 7)
-		user = make_fenced_user(
-			f"batch-report-{frappe.generate_hash(length=8)}@example.com",
-			["Item Manager"],
-			[("Warehouse", "Stores - _TC")],
-		)
-		with as_user(user):
-			rows = execute(frappe._dict(company="_Test Company", item=item.name))[1]
-			self.assertEqual([(row["stock_qty"], row["batch_qty"]) for row in rows], [(15, 7)])
-			update_batch_qty(frappe.as_json(rows))
-		self.assertEqual(batch.reload().batch_qty, 15)
 
 	def test_batch_negative_stock_error(self):
 		"""Test automatic batch selection for outgoing items"""
@@ -672,38 +495,6 @@ class TestBatch(ERPNextTestSuite):
 		)
 
 		self.assertEqual(get_batch_qty("batch a", "_Test Warehouse - _TC"), 90)
-
-	def test_ignore_reserved_qty(self):
-		from hisaabdari.selling.doctype.sales_order.sales_order import create_pick_list
-		from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
-
-		batch_item_name = "Reserve Batch Item"
-		batch_id = "Reserve Batch 1"
-		# Create Batch Item
-		self.make_batch_item(batch_item_name)
-		# Create Batch and Material Receipt Entry with qty 90
-		self.make_new_batch_and_entry(batch_item_name, batch_id, "_Test Warehouse - _TC")
-
-		# Enable Stock Reservation
-		frappe.db.set_single_value("Stock Settings", "enable_stock_reservation", 1)
-
-		# Create Sales Order with qty 50
-		sales_order = make_sales_order(
-			item_code=batch_item_name, warehouse="_Test Warehouse - _TC", qty=50, rate=20
-		)
-
-		# Create Pick List for the Sales Order
-		pl = create_pick_list(sales_order.name)
-		pl.submit()
-		# Create Stock Reservation Entries
-		pl.create_stock_reservation_entries(notify=False)
-
-		batch = frappe.get_doc("Batch", batch_id)
-		# Recalculate Batch Qty
-		batch.recalculate_batch_qty()
-		batch.reload()
-		# Case: Ignore Reserved Qty
-		self.assertEqual(batch.batch_qty, 90)
 
 	def test_total_batch_qty(self):
 		self.make_batch_item("ITEM-BATCH-3")
@@ -996,89 +787,6 @@ class TestBatch(ERPNextTestSuite):
 		)
 
 		self.assertEqual("BATCHEXISTING002", get_batch_from_bundle(pr_2.items[0].serial_and_batch_bundle))
-
-	@ERPNextTestSuite.change_settings("Stock Settings", {"use_serial_batch_fields": 0})
-	def test_pos_reserved_batch_with_bundle_is_counted_once(self):
-		from hisaabdari.accounts.doctype.pos_closing_entry.test_pos_closing_entry import (
-			init_user_and_profile,
-		)
-		from hisaabdari.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
-		from hisaabdari.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
-		from hisaabdari.stock.doctype.stock_reconciliation.test_stock_reconciliation import (
-			create_batch_item_with_batch,
-		)
-
-		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
-		item_code = "_Test POS Batch Bundle Once Item"
-		batch_no = "TestBatch-POS-Once 01"
-		create_batch_item_with_batch(item_code, batch_no)
-		make_stock_entry(
-			target="_Test Warehouse - _TC",
-			item_code=item_code,
-			qty=7,
-			basic_rate=100,
-			batch_no=batch_no,
-			use_serial_batch_fields=1,
-		)
-
-		session_user = frappe.session.user
-		test_user, pos_profile = init_user_and_profile()
-		create_opening_entry(pos_profile, test_user.name)
-		pos_inv = create_pos_invoice(
-			item=item_code, rate=300, qty=2, warehouse="_Test Warehouse - _TC", do_not_save=1
-		)
-		pos_inv.append("payments", {"mode_of_payment": "Cash", "amount": 600})
-		pos_inv.items[0].batch_no = batch_no
-		pos_inv.submit()
-		frappe.set_user(session_user)
-		self.assertTrue(pos_inv.items[0].serial_and_batch_bundle)
-
-		batches = get_batch_qty(
-			item_code=item_code, warehouse="_Test Warehouse - _TC", consider_negative_batches=1
-		)
-		self.assertEqual([(d.batch_no, d.qty) for d in batches], [(batch_no, 5)])
-
-	@ERPNextTestSuite.change_settings("Stock Settings", {"use_serial_batch_fields": 0})
-	def test_pos_reservation_of_expired_batch_is_skipped(self):
-		from hisaabdari.accounts.doctype.pos_closing_entry.test_pos_closing_entry import (
-			init_user_and_profile,
-		)
-		from hisaabdari.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
-		from hisaabdari.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
-		from hisaabdari.stock.doctype.stock_reconciliation.test_stock_reconciliation import (
-			create_batch_item_with_batch,
-		)
-
-		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
-		item_code = "_Test POS Expired Batch Item"
-		batch_no = "TestBatch-POS-Expired 01"
-		create_batch_item_with_batch(item_code, batch_no)
-		make_stock_entry(
-			target="_Test Warehouse - _TC",
-			item_code=item_code,
-			qty=5,
-			basic_rate=100,
-			batch_no=batch_no,
-			use_serial_batch_fields=1,
-		)
-
-		session_user = frappe.session.user
-		test_user, pos_profile = init_user_and_profile()
-		create_opening_entry(pos_profile, test_user.name)
-		pos_inv = create_pos_invoice(
-			item=item_code, rate=300, qty=2, warehouse="_Test Warehouse - _TC", do_not_save=1
-		)
-		pos_inv.append("payments", {"mode_of_payment": "Cash", "amount": 600})
-		pos_inv.items[0].batch_no = batch_no
-		pos_inv.submit()
-		frappe.set_user(session_user)
-
-		frappe.db.set_value("Batch", batch_no, "expiry_date", add_to_date(getdate(), days=-1))
-
-		batches = get_batch_qty(
-			item_code=item_code, warehouse="_Test Warehouse - _TC", consider_negative_batches=1
-		)
-		self.assertEqual(batches, [])
 
 
 def create_batch(item_code, rate, create_item_price_for_batch):

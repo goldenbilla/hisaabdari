@@ -5,11 +5,6 @@ import frappe
 from frappe.query_builder.functions import Timestamp
 from frappe.utils import nowdate, nowtime
 
-from hisaabdari.stock.dashboard.warehouse_capacity_dashboard import get_data
-from hisaabdari.stock.doctype.putaway_rule.putaway_rule import (
-	apply_putaway_rule,
-	get_available_putaway_capacity,
-)
 from hisaabdari.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from hisaabdari.stock.doctype.stock_reconciliation.stock_reconciliation import get_items, get_stock_balance_for
 from hisaabdari.stock.utils import _get_stock_balance, get_stock_balance, scan_barcode
@@ -177,33 +172,6 @@ class TestStockBalancePermissions(ERPNextTestSuite, StockTestMixin):
 	def warehouse_kwargs(self, name):
 		return {"item_code": self.item, "warehouse": name}
 
-	def rows(self, item):
-		return [
-			{
-				"doctype": "Stock Entry Detail",
-				"item_code": item,
-				"qty": 2,
-				"transfer_qty": 2,
-				"uom": "_Test UOM",
-				"t_warehouse": OTHER_WAREHOUSE,
-			}
-		]
-
-	def make_putaway_rule(self):
-		rule = frappe.get_doc(
-			{
-				"doctype": "Putaway Rule",
-				"company": "_Test Company",
-				"item_code": self.item,
-				"warehouse": WAREHOUSE,
-				"capacity": 10,
-				"stock_capacity": 10,
-				"uom": frappe.db.get_value("Item", self.item, "stock_uom"),
-				"conversion_factor": 1,
-			}
-		)
-		return rule.insert().name
-
 	def test_get_stock_balance_applies_user_permissions(self):
 		with as_user(self.user("Stock User", [("Warehouse", OTHER_WAREHOUSE)])):
 			assert_refused_without(self, [123.17], self.balance, WAREHOUSE)
@@ -231,7 +199,6 @@ class TestStockBalancePermissions(ERPNextTestSuite, StockTestMixin):
 			self.assertRaises(frappe.PermissionError, _get_stock_balance, self.item, WAREHOUSE)
 
 	def test_stock_balance_callers_require_item_read(self):
-		rule = self.make_putaway_rule()
 		args = (WAREHOUSE, nowdate(), nowtime(), "_Test Company", self.item)
 		batch_item = self.make_item(
 			properties={"has_batch_no": 1, "create_new_batch": 1, "batch_number_series": "TSBP-.#####"}
@@ -240,8 +207,6 @@ class TestStockBalancePermissions(ERPNextTestSuite, StockTestMixin):
 
 		with as_user(self.user("Desk User")):
 			self.assertRaises(frappe.PermissionError, get_items, *args)
-			self.assertRaises(frappe.PermissionError, get_available_putaway_capacity, rule)
-			self.assertRaises(frappe.PermissionError, get_data, item_code=self.item)
 			has_permission = frappe.has_permission
 			with patch.object(
 				frappe,
@@ -256,11 +221,6 @@ class TestStockBalancePermissions(ERPNextTestSuite, StockTestMixin):
 
 		with as_user(self.user("Stock User")):
 			self.assertRaises(frappe.PermissionError, get_items, *args)
-			self.assertEqual(get_available_putaway_capacity(rule), 3)
-			self.assertEqual(get_data(item_code=self.item)[0]["actual_qty"], 7)
-
-		with as_user(self.user("Stock User", [("Warehouse", OTHER_WAREHOUSE)])):
-			self.assertRaises(frappe.PermissionError, get_available_putaway_capacity, rule)
 
 		with as_user(self.user("Stock Manager", [("Warehouse", OTHER_WAREHOUSE)])):
 			self.assertRaises(frappe.PermissionError, get_items, *args)
@@ -271,89 +231,3 @@ class TestStockBalancePermissions(ERPNextTestSuite, StockTestMixin):
 
 		with as_user(self.user("Stock Manager")):
 			self.assertEqual(get_items(*args)[0]["qty"], 7)
-
-	def test_apply_putaway_rule_requires_form_write(self):
-		rule = self.make_putaway_rule()
-
-		with as_user(self.user("Manufacturing Manager")):
-			self.assertIsNone(
-				apply_putaway_rule(
-					"Stock Entry", self.rows(self.item), "_Test Company", "1", "Material Receipt"
-				)
-			)
-
-		with as_user(self.user("Stock User")):
-			allocated = apply_putaway_rule(
-				"Stock Entry", self.rows(self.item), "_Test Company", "1", "Material Receipt"
-			)
-			unallocated = apply_putaway_rule(
-				"Stock Entry", self.rows(self.other_item), "_Test Company", "1", "Material Receipt"
-			)
-
-		self.assertEqual(allocated[0]["putaway_rule"], rule)
-		self.assertEqual(allocated[0]["t_warehouse"], WAREHOUSE)
-		self.assertFalse(unallocated[0].get("putaway_rule"))
-		self.assertEqual(unallocated[0]["t_warehouse"], OTHER_WAREHOUSE)
-
-		for role, doctypes in (
-			("Desk User", ("Stock Entry", "Purchase Receipt")),
-			("Delivery User", ("Stock Entry", "Purchase Receipt")),
-			("Quality Manager", ("Stock Entry", "Purchase Receipt")),
-			("Accounts User", ("Purchase Receipt",)),
-		):
-			with as_user(self.user(role)):
-				for doctype in doctypes:
-					self.assertRaises(
-						frappe.PermissionError,
-						apply_putaway_rule,
-						doctype,
-						self.rows(self.item),
-						"_Test Company",
-						"1",
-					)
-
-		with as_user(self.user("Stock Manager")):
-			for doctype in ("Item", "Stock Reconciliation"):
-				assert_refused(self, apply_putaway_rule, doctype, self.rows(self.item), "_Test Company", "1")
-
-		with as_user(self.user("Stock User", [("Company", "_Test Company 1")])):
-			assert_refused(
-				self, apply_putaway_rule, "Stock Entry", self.rows(self.item), "_Test Company", "1"
-			)
-
-		frappe.db.set_value("Company", "_Test Company", "default_warehouse", WAREHOUSE)
-		with as_user(self.user("Stock User", [("Warehouse", OTHER_WAREHOUSE)])):
-			fenced = apply_putaway_rule(
-				"Stock Entry", self.rows(self.item), "_Test Company", "1", "Material Receipt"
-			)
-
-		self.assertEqual(fenced[0]["putaway_rule"], rule)
-
-	def test_manufacturing_manager_saves_stock_entry_without_putaway_rules(self):
-		row = {"item_code": self.item, "t_warehouse": WAREHOUSE, "qty": 1, "basic_rate": 100}
-		entry = {
-			"doctype": "Stock Entry",
-			"stock_entry_type": "Material Receipt",
-			"company": "_Test Company",
-			"apply_putaway_rule": 1,
-			"items": [row],
-		}
-
-		with as_user(self.user("Manufacturing Manager")):
-			saved = frappe.get_doc(entry).insert()
-
-		self.assertEqual(saved.items[0].t_warehouse, WAREHOUSE)
-
-		self.make_putaway_rule()
-		row.update({"qty": 5, "transfer_qty": 5, "conversion_factor": 1})
-		frappe.local.message_log = []
-		with as_user(self.user("Manufacturing Manager")):
-			self.assertRaises(frappe.PermissionError, frappe.get_doc(entry).insert)
-
-		self.assertNotIn("Unassigned", str(frappe.local.message_log))
-
-		row.update({"qty": 2, "transfer_qty": 2})
-		with as_user(self.user("Manufacturing User")):
-			saved = frappe.get_doc(entry).insert()
-
-		self.assertEqual(saved.items[0].t_warehouse, WAREHOUSE)

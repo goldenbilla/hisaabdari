@@ -50,6 +50,20 @@ def simple_to_detailed(templates):
 	return {
 		"chart_of_accounts": {
 			"*": {
+				"item_tax_templates": [
+					{
+						"title": title,
+						"taxes": [
+							{
+								"tax_type": {
+									"account_name": data.get("account_name"),
+									"tax_rate": data.get("tax_rate"),
+								}
+							}
+						],
+					}
+					for title, data in templates.items()
+				],
 				"*": [
 					{
 						"title": title,
@@ -83,6 +97,7 @@ def from_detailed_data(company_name, data):
 	tax_templates = coa_data.get(coa_name) or coa_data.get("*", {})
 	sales_tax_templates = tax_templates.get("sales_tax_templates") or tax_templates.get("*", {})
 	purchase_tax_templates = tax_templates.get("purchase_tax_templates") or tax_templates.get("*", {})
+	item_tax_templates = tax_templates.get("item_tax_templates") or tax_templates.get("*", {})
 
 	if sales_tax_templates:
 		for template in sales_tax_templates:
@@ -91,6 +106,10 @@ def from_detailed_data(company_name, data):
 	if purchase_tax_templates:
 		for template in purchase_tax_templates:
 			make_taxes_and_charges_template(company_name, "Purchase Taxes and Charges Template", template)
+
+	if item_tax_templates:
+		for template in item_tax_templates:
+			make_item_tax_template(company_name, template)
 
 
 def make_taxes_and_charges_template(company_name, doctype, template):
@@ -132,6 +151,39 @@ def make_taxes_and_charges_template(company_name, doctype, template):
 	doc.flags.ignore_links = True
 	doc.flags.ignore_validate = True
 	doc.flags.ignore_mandatory = True
+	doc.insert(ignore_permissions=True, ignore_if_duplicate=True)
+	return doc
+
+
+def make_item_tax_template(company_name, template):
+	"""Create an Item Tax Template.
+
+	This requires a separate method because Item Tax Template is structured
+	differently from Sales and Purchase Tax Templates.
+	"""
+	doctype = "Item Tax Template"
+	template["company"] = company_name
+	template["doctype"] = doctype
+
+	if frappe.db.exists(doctype, {"title": template.get("title"), "company": company_name}):
+		return
+
+	for tax_row in template.get("taxes"):
+		account_data = tax_row.get("tax_type")
+
+		# if tax_type is a dict, search or create the account and get it's name
+		if isinstance(account_data, dict):
+			account = get_or_create_account(company_name, account_data)
+			tax_row["tax_type"] = account.name
+			if "tax_rate" not in tax_row:
+				tax_row["tax_rate"] = account_data.get("tax_rate")
+
+	doc = frappe.get_doc(template)
+
+	# Data in country wise json is already pre validated, hence validations can be ignored
+	# Ingone validations to make doctypes faster
+	doc.flags.ignore_links = True
+	doc.flags.ignore_validate = True
 	doc.insert(ignore_permissions=True, ignore_if_duplicate=True)
 	return doc
 

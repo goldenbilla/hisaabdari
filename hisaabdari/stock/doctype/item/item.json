@@ -47,6 +47,10 @@
   "uom_conversion_details_column",
   "uom_help_html",
   "uoms",
+  "item_tax_section_break",
+  "section_break_oilf",
+  "column_break_aytr",
+  "taxes",
   "inventory_section",
   "stock_levels_section",
   "stock_levels_html",
@@ -594,6 +598,24 @@
    "options": "Item Customer Detail"
   },
   {
+   "collapsible": 1,
+   "collapsible_depends_on": "taxes",
+   "fieldname": "item_tax_section_break",
+   "fieldtype": "Tab Break",
+   "label": "Tax",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-money"
+  },
+  {
+   "description": "Will also apply for variants",
+   "fieldname": "taxes",
+   "fieldtype": "Table",
+   "label": "Taxes",
+   "oldfieldname": "item_tax",
+   "oldfieldtype": "Table",
+   "options": "Item Tax"
+  },
+  {
    "fieldname": "customer_code",
    "fieldtype": "Small Text",
    "hidden": 1,
@@ -669,6 +691,15 @@
   },
   {
    "fieldname": "column_break_wugd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_oilf",
+   "fieldtype": "Section Break",
+   "hide_border": 1
+  },
+  {
+   "fieldname": "column_break_aytr",
    "fieldtype": "Column Break"
   },
   {

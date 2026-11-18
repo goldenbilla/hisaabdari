@@ -13,18 +13,6 @@ from hisaabdari.tests.utils import ERPNextTestSuite
 
 
 class TestQuotation(ERPNextTestSuite):
-	def test_declare_lost_requires_a_reason_without_changing_the_quotation(self):
-		quotation = make_quotation()
-		previous_status = quotation.status
-
-		with self.assertRaises(frappe.ValidationError):
-			quotation.declare_enquiry_lost([], [], "New detailed reason")
-
-		quotation.reload()
-		self.assertEqual(quotation.status, previous_status)
-		self.assertFalse(quotation.order_lost_reason)
-		self.assertFalse(quotation.lost_reasons)
-		self.assertFalse(quotation.competitors)
 
 	def test_declare_lost_on_ordered_quotation_preserves_sales_order_error(self):
 		quotation = make_quotation()
@@ -37,28 +25,13 @@ class TestQuotation(ERPNextTestSuite):
 			quotation.declare_enquiry_lost([], [])
 
 	def test_declare_lost_with_a_reason(self):
-		reason = "_Test Quotation Lost Reason"
-		if not frappe.db.exists("Quotation Lost Reason", reason):
-			frappe.get_doc({"doctype": "Quotation Lost Reason", "order_lost_reason": reason}).insert()
 		quotation = make_quotation()
 
-		quotation.declare_enquiry_lost([{"lost_reason": reason}], [], "Too expensive")
+		quotation.declare_enquiry_lost([], [], "Too expensive")
 
 		quotation.reload()
 		self.assertEqual(quotation.status, "Lost")
 		self.assertEqual(quotation.order_lost_reason, "Too expensive")
-		self.assertEqual([row.lost_reason for row in quotation.lost_reasons], [reason])
-
-	def test_cancel_clears_lost_reasons(self):
-		reason = "_Test Quotation Lost Reason"
-		if not frappe.db.exists("Quotation Lost Reason", reason):
-			frappe.get_doc({"doctype": "Quotation Lost Reason", "order_lost_reason": reason}).insert()
-		quotation = make_quotation()
-		quotation.declare_enquiry_lost([{"lost_reason": reason}], [], "Too expensive")
-
-		quotation.reload().cancel()
-
-		self.assertFalse(quotation.reload().lost_reasons)
 
 	def setUp(self):
 		self.load_test_records("Quotation")
@@ -613,11 +586,6 @@ class TestQuotation(ERPNextTestSuite):
 		quotation.valid_till = add_days(quotation.transaction_date, -1)
 		self.assertRaises(frappe.ValidationError, quotation.validate)
 
-	@ERPNextTestSuite.change_settings("CRM Settings", {"default_valid_till": "30"})
-	def test_default_validity_days_set_on_server(self):
-		quotation = make_quotation(do_not_submit=1)
-		self.assertEqual(getdate(quotation.valid_till), getdate(add_days(quotation.transaction_date, 30)))
-
 	def test_so_from_expired_quotation(self):
 		from hisaabdari.selling.doctype.quotation.quotation import make_sales_order
 
@@ -727,203 +695,6 @@ class TestQuotation(ERPNextTestSuite):
 		set_expired_status()
 		expired_quotation.reload()
 		self.assertEqual(expired_quotation.status, "Expired")
-
-	def test_product_bundle_mapping_on_creating_so(self):
-		from hisaabdari.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
-		from hisaabdari.selling.doctype.quotation.quotation import make_sales_order
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		make_item("_Test Product Bundle", {"is_stock_item": 0})
-		make_item("_Test Bundle Item 1", {"is_stock_item": 1})
-		make_item("_Test Bundle Item 2", {"is_stock_item": 1})
-
-		make_product_bundle("_Test Product Bundle", ["_Test Bundle Item 1", "_Test Bundle Item 2"])
-
-		quotation = make_quotation(item_code="_Test Product Bundle", qty=1, rate=100)
-		sales_order = make_sales_order(quotation.name)
-
-		quotation_item = [
-			quotation.items[0].item_code,
-			quotation.items[0].rate,
-			quotation.items[0].qty,
-			quotation.items[0].amount,
-		]
-		so_item = [
-			sales_order.items[0].item_code,
-			sales_order.items[0].rate,
-			sales_order.items[0].qty,
-			sales_order.items[0].amount,
-		]
-
-		self.assertEqual(quotation_item, so_item)
-
-		quotation_packed_items = [
-			[
-				quotation.packed_items[0].parent_item,
-				quotation.packed_items[0].item_code,
-				quotation.packed_items[0].qty,
-			],
-			[
-				quotation.packed_items[1].parent_item,
-				quotation.packed_items[1].item_code,
-				quotation.packed_items[1].qty,
-			],
-		]
-		so_packed_items = [
-			[
-				sales_order.packed_items[0].parent_item,
-				sales_order.packed_items[0].item_code,
-				sales_order.packed_items[0].qty,
-			],
-			[
-				sales_order.packed_items[1].parent_item,
-				sales_order.packed_items[1].item_code,
-				sales_order.packed_items[1].qty,
-			],
-		]
-
-		self.assertEqual(quotation_packed_items, so_packed_items)
-
-	def test_product_bundle_price_calculation_when_calculate_bundle_price_is_unchecked(self):
-		from hisaabdari.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		make_item("_Test Product Bundle", {"is_stock_item": 0})
-		bundle_item1 = make_item("_Test Bundle Item 1", {"is_stock_item": 1})
-		bundle_item2 = make_item("_Test Bundle Item 2", {"is_stock_item": 1})
-
-		make_product_bundle("_Test Product Bundle", ["_Test Bundle Item 1", "_Test Bundle Item 2"])
-
-		bundle_item1.valuation_rate = 100
-		bundle_item1.save()
-
-		bundle_item2.valuation_rate = 200
-		bundle_item2.save()
-
-		quotation = make_quotation(item_code="_Test Product Bundle", qty=2, rate=100)
-		self.assertEqual(quotation.items[0].amount, 200)
-
-	def test_product_bundle_price_calculation_when_calculate_bundle_price_is_checked(self):
-		from hisaabdari.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		make_item("_Test Product Bundle", {"is_stock_item": 0})
-		make_item("_Test Bundle Item 1", {"is_stock_item": 1})
-		make_item("_Test Bundle Item 2", {"is_stock_item": 1})
-
-		make_product_bundle("_Test Product Bundle", ["_Test Bundle Item 1", "_Test Bundle Item 2"])
-
-		enable_calculate_bundle_price()
-
-		quotation = make_quotation(item_code="_Test Product Bundle", qty=2, rate=100, do_not_submit=1)
-		quotation.packed_items[0].rate = 100
-		quotation.packed_items[1].rate = 200
-		quotation.save()
-
-		self.assertEqual(quotation.items[0].amount, 600)
-		self.assertEqual(quotation.items[0].rate, 300)
-
-		enable_calculate_bundle_price(enable=0)
-
-	def test_product_bundle_price_calculation_for_multiple_product_bundles_when_calculate_bundle_price_is_checked(
-		self,
-	):
-		from hisaabdari.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		make_item("_Test Product Bundle 1", {"is_stock_item": 0})
-		make_item("_Test Product Bundle 2", {"is_stock_item": 0})
-		make_item("_Test Bundle Item 1", {"is_stock_item": 1})
-		make_item("_Test Bundle Item 2", {"is_stock_item": 1})
-		make_item("_Test Bundle Item 3", {"is_stock_item": 1})
-
-		make_product_bundle("_Test Product Bundle 1", ["_Test Bundle Item 1", "_Test Bundle Item 2"])
-		make_product_bundle("_Test Product Bundle 2", ["_Test Bundle Item 2", "_Test Bundle Item 3"])
-
-		enable_calculate_bundle_price()
-
-		item_list = [
-			{
-				"item_code": "_Test Product Bundle 1",
-				"warehouse": "",
-				"qty": 1,
-				"rate": 400,
-				"delivered_by_supplier": 1,
-				"supplier": "_Test Supplier",
-			},
-			{
-				"item_code": "_Test Product Bundle 2",
-				"warehouse": "",
-				"qty": 1,
-				"rate": 400,
-				"delivered_by_supplier": 1,
-				"supplier": "_Test Supplier",
-			},
-		]
-
-		quotation = make_quotation(item_list=item_list, do_not_submit=1)
-		quotation.packed_items[0].rate = 100
-		quotation.packed_items[1].rate = 200
-		quotation.packed_items[2].rate = 200
-		quotation.packed_items[3].rate = 300
-		quotation.save()
-
-		expected_values = [300, 500]
-
-		for item in quotation.items:
-			self.assertEqual(item.amount, expected_values[item.idx - 1])
-
-		enable_calculate_bundle_price(enable=0)
-
-	def test_packed_items_indices_are_reset_when_product_bundle_is_deleted_from_items_table(self):
-		from hisaabdari.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		make_item("_Test Product Bundle 1", {"is_stock_item": 0})
-		make_item("_Test Product Bundle 2", {"is_stock_item": 0})
-		make_item("_Test Product Bundle 3", {"is_stock_item": 0})
-		make_item("_Test Bundle Item 1", {"is_stock_item": 1})
-		make_item("_Test Bundle Item 2", {"is_stock_item": 1})
-		make_item("_Test Bundle Item 3", {"is_stock_item": 1})
-
-		make_product_bundle("_Test Product Bundle 1", ["_Test Bundle Item 1", "_Test Bundle Item 2"])
-		make_product_bundle("_Test Product Bundle 2", ["_Test Bundle Item 2", "_Test Bundle Item 3"])
-		make_product_bundle("_Test Product Bundle 3", ["_Test Bundle Item 3", "_Test Bundle Item 1"])
-
-		item_list = [
-			{
-				"item_code": "_Test Product Bundle 1",
-				"warehouse": "",
-				"qty": 1,
-				"rate": 400,
-				"delivered_by_supplier": 1,
-				"supplier": "_Test Supplier",
-			},
-			{
-				"item_code": "_Test Product Bundle 2",
-				"warehouse": "",
-				"qty": 1,
-				"rate": 400,
-				"delivered_by_supplier": 1,
-				"supplier": "_Test Supplier",
-			},
-			{
-				"item_code": "_Test Product Bundle 3",
-				"warehouse": "",
-				"qty": 1,
-				"rate": 400,
-				"delivered_by_supplier": 1,
-				"supplier": "_Test Supplier",
-			},
-		]
-
-		quotation = make_quotation(item_list=item_list, do_not_submit=1)
-		del quotation.items[1]
-		quotation.save()
-
-		for id, item in enumerate(quotation.packed_items):
-			expected_index = id + 1
-			self.assertEqual(item.idx, expected_index)
 
 	def test_alternative_items_with_stock_items(self):
 		"""
@@ -1260,24 +1031,6 @@ class TestQuotation(ERPNextTestSuite):
 		quotation.reload()
 		self.assertEqual(quotation.status, "Ordered")
 
-	@ERPNextTestSuite.change_settings("Accounts Settings", {"allow_pegged_currencies_exchange_rates": True})
-	def test_make_quotation_qar_to_inr(self):
-		quotation = make_quotation(
-			currency="QAR",
-			transaction_date="2026-01-01",
-		)
-
-		cache = frappe.cache()
-		key = "currency_exchange_rate_{}:{}:{}".format("2026-01-01", "QAR", "INR")
-		value = cache.get_value(key)
-		expected_rate = flt(value) / 3.64
-
-		self.assertEqual(
-			quotation.conversion_rate,
-			expected_rate,
-			f"Expected conversion rate {expected_rate}, got {quotation.conversion_rate}",
-		)
-
 	def test_over_order_limit(self):
 		quotation = make_quotation(qty=5)
 		so1 = make_sales_order(quotation.name)
@@ -1393,13 +1146,8 @@ class TestQuotation(ERPNextTestSuite):
 	def test_lost_or_expired_quotation_cannot_be_invoiced(self):
 		from hisaabdari.selling.doctype.quotation.quotation import make_sales_invoice
 
-		if not frappe.db.exists("Quotation Lost Reason", "_Test Quotation Lost Reason"):
-			frappe.get_doc(
-				{"doctype": "Quotation Lost Reason", "order_lost_reason": "_Test Quotation Lost Reason"}
-			).insert()
-
 		lost = make_quotation()
-		lost.declare_enquiry_lost([{"lost_reason": "_Test Quotation Lost Reason"}], [])
+		lost.declare_enquiry_lost([], [])
 		self.assertRaises(frappe.ValidationError, make_sales_invoice, lost.name)
 
 		expired = make_quotation(do_not_submit=1)
@@ -1441,35 +1189,6 @@ class TestQuotation(ERPNextTestSuite):
 		row = quotation.items[0]
 		raised = json.dumps([{"item_code": row.item_code, "qty": 5, "rate": row.rate, "docname": row.name}])
 		self.assertRaises(frappe.ValidationError, update_child_qty_rate, "Quotation", raised, quotation.name)
-
-	def test_quotation_update_items_rebuilds_bundle_packed_items(self):
-		from hisaabdari.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		make_item("_Test Product Bundle", {"is_stock_item": 0})
-		make_item("_Test Bundle Item 1", {"is_stock_item": 1})
-		make_item("_Test Bundle Item 2", {"is_stock_item": 1})
-		make_product_bundle("_Test Product Bundle", ["_Test Bundle Item 1", "_Test Bundle Item 2"])
-
-		quotation = make_quotation(item_code="_Test Product Bundle", qty=1, rate=100)
-		before = {pi.item_code: pi.qty for pi in quotation.packed_items}
-		self.assertTrue(before)
-
-		row = quotation.items[0]
-		trans_items = json.dumps(
-			[{"item_code": row.item_code, "qty": 3, "rate": row.rate, "docname": row.name}]
-		)
-		update_child_qty_rate("Quotation", trans_items, quotation.name)
-
-		quotation.reload()
-		after = {pi.item_code: pi.qty for pi in quotation.packed_items}
-		self.assertEqual(after, {code: qty * 3 for code, qty in before.items()})
-
-
-def enable_calculate_bundle_price(enable=1):
-	selling_settings = frappe.get_doc("Selling Settings")
-	selling_settings.editable_bundle_item_rates = enable
-	selling_settings.save()
 
 
 def get_quotation_dict(party_name=None, item_code=None):

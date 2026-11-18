@@ -16,7 +16,7 @@ from frappe.utils import add_days, now_datetime, today
 from hisaabdari.stock.doctype.item.test_item import make_item
 from hisaabdari.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from hisaabdari.stock.doctype.stock_reconciliation.test_stock_reconciliation import create_stock_reconciliation
-from hisaabdari.stock.report.stock_balance import stock_balance, stock_balance_snapshot
+from hisaabdari.stock.report.stock_balance import stock_balance
 from hisaabdari.stock.report.stock_balance import test_stock_balance as live_tests
 from hisaabdari.tests.utils import ERPNextTestSuite
 
@@ -171,11 +171,7 @@ class TestStockBalanceSnapshot(ERPNextTestSuite):
 	def test_item_and_warehouse_filters(self):
 		self.make_movement(qty=10, basic_rate=100)
 		parent = frappe.db.get_value("Warehouse", "Stores - _TC", "parent_warehouse")
-		warehouse_type = frappe.get_doc(doctype="Warehouse Type", name="_Test DuckDB Stores").insert().name
-		frappe.db.set_value("Warehouse", "Stores - _TC", "warehouse_type", warehouse_type)
 		self.assert_snapshot_matches(warehouse=[parent], item_group="Products")
-		self.assert_snapshot_matches(warehouse=None, warehouse_type=warehouse_type)
-		self.assert_snapshot_matches(brand="No matching brand")
 
 	def test_stock_closing_balance_is_the_opening(self):
 		self.make_movement(qty=10, basic_rate=100, posting_date=add_days(today(), -10))
@@ -208,45 +204,6 @@ class TestStockBalanceSnapshot(ERPNextTestSuite):
 		reconciliation.cancel()
 		with ledger_snapshot(ledger):
 			self.assertEqual(stock_balance.execute_snapshot_report(deepcopy(self.filters)), expected)
-
-	def test_inventory_dimension_filter_and_grouping(self):
-		for entry in (
-			self.make_movement(qty=10, basic_rate=100, posting_date=add_days(today(), -10)),
-			self.make_movement(qty=5, basic_rate=100),
-		):
-			self.set_ledger_values(entry.name, {"project": "DuckDB Project"})
-		dimensions = [frappe._dict(fieldname="project", doctype="Project")]
-		with patch.object(stock_balance, "get_inventory_dimensions", return_value=dimensions):
-			self.assert_snapshot_matches(project=["DuckDB Project"], show_dimension_wise_stock=1)
-
-	def test_sparse_inventory_dimensions_group_like_the_live_key(self):
-		values = (("A", ""), ("", "A"), ("B", "A"), (None, None), ("", ""))
-		for index, (project, detail) in enumerate(values):
-			entry = self.make_movement(
-				qty=index + 1, basic_rate=100, posting_date=add_days(today(), index - 4)
-			)
-			self.set_ledger_values(entry.name, {"project": project, "voucher_detail_no": detail})
-		dimensions = [
-			frappe._dict(fieldname=field, doctype="Project") for field in ("project", "voucher_detail_no")
-		]
-		with patch.object(stock_balance, "get_inventory_dimensions", return_value=dimensions):
-			for dimension_filters in ({"show_dimension_wise_stock": 1}, {"project": ["A", "B"]}, {}):
-				with self.subTest(filters=dimension_filters):
-					self.assert_snapshot_matches(**dimension_filters)
-
-	def test_inventory_dimension_added_after_the_sync(self):
-		self.make_movement(qty=10, basic_rate=100)
-		ledger = capture_ledger(self.filters)
-		dimensions = [frappe._dict(fieldname="project", doctype="Project")]
-		with patch.object(stock_balance, "get_inventory_dimensions", return_value=dimensions):
-			for dimension_filters in ({"show_dimension_wise_stock": 1}, {"project": ["DuckDB Project"]}):
-				filters = frappe._dict(self.filters, **dimension_filters)
-				expected = stock_balance.execute(deepcopy(filters))
-				with self.subTest(filters=dimension_filters), ledger_snapshot(ledger):
-					stock_balance_snapshot.get_duckdb().execute(
-						'ALTER TABLE "tabStock Ledger Entry" DROP COLUMN project'
-					)
-					self.assertEqual(stock_balance.execute_snapshot_report(deepcopy(filters)), expected)
 
 	def test_serial_and_batch_items(self):
 		self.use_item("_Test DuckDB Serial Item", {"has_serial_no": 1, "serial_no_series": "DUCK-SN-.#####"})

@@ -31,7 +31,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 				}
 			).insert(ignore_permissions=True)
 		cls.customer_group = frappe.db.get_value("Customer Group", {"is_group": 0})
-		cls.territory = frappe.db.get_value("Territory", {"is_group": 0})
 		cls.supplier_group = frappe.db.get_value("Supplier Group", {"is_group": 0})
 		frappe.cache.delete_value("data_import_column_header_map")
 		frappe.db.commit()  # nosemgrep
@@ -45,8 +44,8 @@ class TestPartyImportProvider(ERPNextTestSuite):
 		for party, party_columns, party_values in (
 			(
 				"Customer",
-				["customer_name", "customer_type", "customer_group", "territory"],
-				[f"{PREFIX} Customer", "Company", self.customer_group, self.territory],
+				["customer_name", "customer_type", "customer_group"],
+				[f"{PREFIX} Customer", "Company", self.customer_group],
 			),
 			("Supplier", ["supplier_name", "supplier_group"], [f"{PREFIX} Supplier", self.supplier_group]),
 		):
@@ -90,7 +89,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 			"customer_name",
 			"customer_type",
 			"customer_group",
-			"territory",
 			"contacts.email_id",
 			"addresses.address_line1",
 			"addresses.city",
@@ -100,7 +98,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 			f"{PREFIX} Reimport",
 			"Company",
 			self.customer_group,
-			self.territory,
 			"reimport@example.com",
 			"1 Main St",
 			"Berlin",
@@ -158,13 +155,12 @@ class TestPartyImportProvider(ERPNextTestSuite):
 			"customer_name",
 			"customer_type",
 			"customer_group",
-			"territory",
 			"contacts.email_id",
 			"addresses.address_line1",
 			"addresses.city",
 			"addresses.country",
 		]
-		party = ["Company", self.customer_group, self.territory]
+		party = ["Company", self.customer_group]
 		self.run_import(
 			"Customer",
 			INSERT,
@@ -196,13 +192,12 @@ class TestPartyImportProvider(ERPNextTestSuite):
 					"customer_name",
 					"customer_type",
 					"customer_group",
-					"territory",
 					"contacts.first_name",
 					"contacts.email_id",
 				],
-				["John Paul Smith", "Individual", self.customer_group, self.territory, "", "jps@example.com"],
-				["", "", "", "", "Ann", "ann-jps@example.com"],
-				[f"{PREFIX} Company", "Company", self.customer_group, self.territory, "", "co@example.com"],
+				["John Paul Smith", "Individual", self.customer_group, "", "jps@example.com"],
+				["", "", "", "Ann", "ann-jps@example.com"],
+				[f"{PREFIX} Company", "Company", self.customer_group, "", "co@example.com"],
 			],
 		)
 
@@ -227,7 +222,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 					"customer_name",
 					"customer_type",
 					"customer_group",
-					"territory",
 					"contacts.first_name",
 					"contacts.email_id",
 					"contacts.is_primary_contact",
@@ -239,7 +233,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 					f"{PREFIX} Export",
 					"Company",
 					self.customer_group,
-					self.territory,
 					"Ann",
 					"ann-export@example.com",
 					"",
@@ -247,7 +240,7 @@ class TestPartyImportProvider(ERPNextTestSuite):
 					"Berlin",
 					"Germany",
 				],
-				["", "", "", "", "Bob", "bob-export@example.com", "1", "", "", ""],
+				["", "", "", "Bob", "bob-export@example.com", "1", "", "", ""],
 			],
 		)
 		name = self.get_party("Customer", f"{PREFIX} Export")
@@ -289,9 +282,9 @@ class TestPartyImportProvider(ERPNextTestSuite):
 		self.assertEqual(len(self.linked("Address", "Customer", name)), 1)
 
 	def test_export_orders_by_each_partys_own_primary(self):
-		columns = ["customer_name", "customer_type", "customer_group", "territory", "contacts.email_id"]
+		columns = ["customer_name", "customer_type", "customer_group", "contacts.email_id"]
 		for party, email in (("A", "shared@example.com"), ("B", "own-b@example.com")):
-			values = [f"{PREFIX} Shared {party}", "Company", self.customer_group, self.territory, email]
+			values = [f"{PREFIX} Shared {party}", "Company", self.customer_group, email]
 			self.run_import("Customer", INSERT, [columns, values])
 		party_a = self.get_party("Customer", f"{PREFIX} Shared A")
 		party_b = self.get_party("Customer", f"{PREFIX} Shared B")
@@ -323,7 +316,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 			"customer_name",
 			"customer_type",
 			"customer_group",
-			"territory",
 			"contacts.email_id",
 			"addresses.address_line1",
 			"addresses.city",
@@ -333,7 +325,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 			f"{PREFIX} No Primary",
 			"Company",
 			self.customer_group,
-			self.territory,
 			"no-primary@example.com",
 			"1 Main St",
 			"Berlin",
@@ -382,7 +373,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 			"customer_name",
 			"customer_type",
 			"customer_group",
-			"territory",
 			"contacts.email_id",
 			"addresses.address_line1",
 			"addresses.city",
@@ -392,7 +382,6 @@ class TestPartyImportProvider(ERPNextTestSuite):
 			f"{PREFIX} Added Rows",
 			"Company",
 			self.customer_group,
-			self.territory,
 			"kept@example.com",
 			"1 Main St",
 			"Berlin",

@@ -8,7 +8,7 @@ import frappe
 from frappe import _, scrub
 from frappe.model.document import Document, bulk_insert
 from frappe.query_builder import functions
-from frappe.utils import cint, flt, round_based_on_smallest_currency_fraction
+from frappe.utils import cint, flt, get_link_to_form, round_based_on_smallest_currency_fraction
 
 import hisaabdari
 from hisaabdari.accounts.doctype.journal_entry.journal_entry import get_exchange_rate
@@ -23,7 +23,10 @@ from hisaabdari.controllers.accounts_controller import (
 from hisaabdari.deprecation_dumpster import deprecated
 from hisaabdari.stock.get_item_details import (
 	NOT_APPLICABLE_TAX,
+	ItemDetailsCtx,
 	_get_item_tax_map,
+	_get_item_tax_template,
+	get_item_tax_template,
 )
 from hisaabdari.utilities.regional import temporary_flag
 
@@ -80,6 +83,7 @@ class calculate_taxes_and_totals:
 	def _calculate(self):
 		self.validate_conversion_rate()
 		self.calculate_item_values()
+		self.validate_item_tax_template()
 		self.update_item_tax_map()
 		self.initialize_taxes()
 		self.determine_exclusive_rate()
@@ -90,11 +94,96 @@ class calculate_taxes_and_totals:
 		self.calculate_totals()
 		self.calculate_total_net_weight()
 
+	def validate_item_tax_template(self):
+		if self.ignore_tax_template_validation:
+			return
+
+		if self.doc.get("is_return") and self.doc.get("return_against"):
+			return
+
+		for item in self.doc.items:
+			if item.item_code and item.get("item_tax_template"):
+				item_doc = frappe.get_cached_doc("Item", item.item_code)
+				ctx = ItemDetailsCtx(
+					{
+						"net_rate": item.net_rate or item.rate,
+						"base_net_rate": item.base_net_rate or item.base_rate,
+						"posting_date": self.doc.get("posting_date"),
+						"bill_date": self.doc.get("bill_date"),
+						"transaction_date": self.doc.get("transaction_date"),
+						"company": self.doc.get("company"),
+					}
+				)
+
+				item_group = item_doc.item_group
+				item_group_taxes = []
+
+				while item_group:
+					item_group_doc = frappe.get_cached_doc("Item Group", item_group)
+					item_group_taxes += item_group_doc.taxes or []
+					item_group = item_group_doc.parent_item_group
+
+				item_taxes = item_doc.taxes or []
+
+				if not item_group_taxes and (not item_taxes):
+					# No validation if no taxes in item or item group
+					continue
+
+				taxes = _get_item_tax_template(ctx, item_taxes + item_group_taxes, for_validate=True)
+
+				if taxes:
+					if item.item_tax_template not in taxes:
+						item.item_tax_template = get_item_tax_template(ctx, item_doc)
+						frappe.msgprint(
+							_("Row {0}: Item Tax template updated as per validity and rate applied").format(
+								item.idx, frappe.bold(item.item_code)
+							)
+						)
+
+						# For correct tax_amount calculation re-computation is required
+						if self.discount_amount_applied and self.doc.apply_discount_on == "Grand Total":
+							self.need_recomputation = True
+
+		self.validate_item_tax_templates_are_usable()
+
+	def validate_item_tax_templates_are_usable(self):
+		if self.doc.get("_action") not in ("save", "submit"):
+			return
+
+		for template in self.get_changed_item_tax_templates():
+			disabled, company = frappe.get_cached_value(
+				"Item Tax Template", template, ["disabled", "company"]
+			)
+			if disabled:
+				frappe.throw(
+					_("Item Tax Template {0} is disabled").format(
+						get_link_to_form("Item Tax Template", template)
+					),
+					title=_("Disabled Item Tax Template"),
+				)
+			if company != self.doc.company:
+				frappe.throw(
+					_("Item Tax Template {0} does not belong to Company {1}").format(
+						get_link_to_form("Item Tax Template", template), frappe.bold(self.doc.company)
+					)
+				)
+
+	def get_changed_item_tax_templates(self) -> set:
+		doc_before_save = self.doc.get_doc_before_save()
+		saved_templates = (
+			{item.name: item.item_tax_template for item in doc_before_save.items} if doc_before_save else {}
+		)
+		return {
+			item.item_tax_template
+			for item in self.doc.items
+			if item.get("item_tax_template") and item.item_tax_template != saved_templates.get(item.name)
+		}
+
 	def update_item_tax_map(self):
 		for item in self.doc.items:
 			item.item_tax_rate = _get_item_tax_map(
 				doc=self.doc,
-				tax_template=None,
+				tax_template=item.item_tax_template,
 				as_json=True,
 			)
 

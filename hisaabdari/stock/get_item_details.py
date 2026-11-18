@@ -2,6 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 
+import datetime
 import json
 import typing
 from functools import WRAPPER_ASSIGNMENTS, wraps
@@ -12,6 +13,7 @@ from frappe.core.doctype.user_permission.user_permission import get_user_permiss
 from frappe.model import child_table_fields, default_fields
 from frappe.model.document import Document
 from frappe.model.meta import get_field_precision
+from frappe.model.utils import get_fetch_values
 from frappe.query_builder.functions import IfNull, Sum
 from frappe.utils import add_days, cint, cstr, flt, get_link_to_form, getdate, parse_json
 from pypika import Order
@@ -242,8 +244,10 @@ def _get_item_details(
 
 	out: ItemDetails = get_basic_details(ctx, item, overwrite_warehouse)
 
+	get_item_tax_template(ctx, item, out)
 	out.item_tax_rate = _get_item_tax_map(
 		doc=doc or ctx,
+		tax_template=out.item_tax_template or ctx.item_tax_template,
 		as_json=True,
 	)
 
@@ -840,7 +844,196 @@ def get_barcode_data(items_list=None, item_code=None):
 
 
 @frappe.whitelist()
+def get_item_tax_info(doc, tax_category, item_codes, item_rates=None, item_tax_templates=None):
+	out = {}
+
+	if item_tax_templates is None:
+		item_tax_templates = {}
+
+	if item_rates is None:
+		item_rates = {}
+
+	doc = parse_json(doc)
+	item_codes = parse_json(item_codes)
+	item_rates = parse_json(item_rates)
+	item_tax_templates = parse_json(item_tax_templates)
+
+	for item_code in item_codes:
+		if not item_code or item_code[1] in out or not item_tax_templates.get(item_code[1]):
+			continue
+
+		if not isinstance(item_code[0], str):
+			frappe.throw(_("Invalid Item Code"))
+
+		out[item_code[1]] = ItemDetails()
+		item = frappe.get_cached_doc("Item", item_code[0])
+		ctx: ItemDetailsCtx = {
+			"company": doc.company,
+			"base_net_rate": item_rates.get(item_code[1]),
+		}
+
+		if item_tax_templates:
+			ctx.update({"item_tax_template": item_tax_templates.get(item_code[1])})
+
+		get_item_tax_template(ctx, item, out[item_code[1]])
+		out[item_code[1]]["item_tax_rate"] = _get_item_tax_map(
+			doc=doc,
+			tax_template=out[item_code[1]].get("item_tax_template"),
+			as_json=True,
+		)
+
+	for item_tax_template in {row.item_tax_template for row in out.values() if row.item_tax_template}:
+		hisaabdari.require_permission("Item Tax Template", item_tax_template, "select")
+
+	return out
+
+
+@frappe.whitelist()
+@hisaabdari.normalize_ctx_input(ItemDetailsCtx)
+def get_item_tax_template(ctx, item=None, out: ItemDetails | None = None):
+	"""
+	Determines item_tax template from item or parent item groups.
+
+	Accesses:
+	        ctx = {
+	        "child_doctype": str
+	        }
+	Passes:
+	        ctx = {
+	                "company": str
+	                "bill_date": str
+	                "transaction_date": str
+	        "item_tax_template": None
+	        "base_net_rate": float
+	        }
+	"""
+	if not item:
+		if not ctx.get("item_code") or not isinstance(ctx.item_code, str):
+			frappe.throw(_("Item/Item Code required to get Item Tax Template."))
+		else:
+			item = frappe.get_cached_doc("Item", ctx.item_code)
+
+	item_tax_template = None
+	if item.taxes:
+		item_tax_template = _get_item_tax_template(ctx, item.taxes, out)
+
+	if not item_tax_template:
+		item_tax_template = _get_item_tax_template_from_item_group(ctx, item.item_group, out)
+
+	if out and ctx.get("child_doctype") and item_tax_template:
+		out.update(get_fetch_values(ctx.get("child_doctype"), "item_tax_template", item_tax_template))
+
+	return item_tax_template
+
+
+def _get_item_tax_template_from_item_group(ctx, item_group, out=None):
+	"""Return the first tax template found walking up from `item_group` to the root."""
+	while item_group:
+		group_doc = frappe.get_cached_doc("Item Group", item_group)
+		item_tax_template = _get_item_tax_template(ctx, group_doc.taxes, out)
+		if item_tax_template:
+			return item_tax_template
+		item_group = group_doc.parent_item_group
+	return None
+
+
+@hisaabdari.normalize_ctx_input(ItemDetailsCtx)
+def _get_item_tax_template(
+	ctx: ItemDetailsCtx, taxes, out: ItemDetails | None = None, for_validate=False
+) -> None | str | list[str]:
+	"""
+	Accesses:
+	        ctx = {
+	                "company": str
+	                "bill_date": str
+	                "transaction_date": str
+	        "item_tax_template": None
+	        }
+	Passes:
+	        ctx = {
+	        "base_net_rate": float
+	        }
+	"""
+	if out is None:
+		out = ItemDetails()
+	taxes = get_latest_item_taxes(get_applicable_item_taxes(ctx, taxes))
+	category_templates = [tax.item_tax_template for tax in taxes]
+
+	if for_validate:
+		return category_templates
+
+	# do not change if already a valid template
+	if ctx.get("item_tax_template") in (category_templates or {t.item_tax_template for t in taxes}):
+		out.item_tax_template = ctx.get("item_tax_template")
+		return ctx.get("item_tax_template")
+
+	if category_templates:
+		out.item_tax_template = category_templates[0]
+		return category_templates[0]
+	return None
+
+
+def get_applicable_item_taxes(ctx, taxes) -> list:
+	validation_date = getdate(ctx.get("bill_date") or ctx.get("posting_date") or ctx.get("transaction_date"))
+	applicable_taxes = []
+	for tax in taxes:
+		disabled, tax_company = frappe.get_cached_value(
+			"Item Tax Template", tax.item_tax_template, ["disabled", "company"]
+		)
+		if (
+			not disabled
+			and tax_company == ctx["company"]
+			and get_item_tax_valid_from(tax) <= validation_date
+			and is_within_valid_range(ctx, tax)
+		):
+			applicable_taxes.append(tax)
+
+	return applicable_taxes
+
+
+def get_latest_item_taxes(taxes) -> list:
+	latest_priority = {}
+	latest_taxes = []
+	for tax in sorted(taxes, key=get_item_tax_priority, reverse=True):
+		priority = get_item_tax_priority(tax)
+		key = (tax.get("parenttype"), tax.get("parent"))
+		if latest_priority.setdefault(key, priority) == priority:
+			latest_taxes.append(tax)
+
+	return latest_taxes
+
+
+def get_item_tax_priority(tax) -> tuple:
+	return get_item_tax_valid_from(tax), flt(tax.maximum_net_rate) > 0
+
+
+def get_item_tax_valid_from(tax) -> datetime.date:
+	return getdate(tax.valid_from) if tax.valid_from else datetime.date.min
+
+
+@hisaabdari.normalize_ctx_input(ItemDetailsCtx)
+def is_within_valid_range(ctx: ItemDetailsCtx, tax) -> bool:
+	"""
+	Accesses:
+	        ctx = {
+	        "base_net_rate": float
+	        }
+	"""
+
+	if not flt(tax.maximum_net_rate):
+		# No range specified, just ignore
+		return True
+	elif flt(tax.minimum_net_rate) <= flt(ctx.get("base_net_rate")) <= flt(tax.maximum_net_rate):
+		return True
+
+	return False
+
+
+@frappe.whitelist()
 def get_item_tax_map(*, doc: str | dict | Document, tax_template: str | None = None, as_json=True):
+	if tax_template:
+		hisaabdari.require_permission("Item Tax Template", tax_template, "select")
+
 	return _get_item_tax_map(doc=doc, tax_template=tax_template, as_json=as_json)
 
 
@@ -849,6 +1042,15 @@ def _get_item_tax_map(*, doc: str | dict | Document, tax_template: str | None = 
 	item_tax_map = {}
 	for t in (t for t in (doc.get("taxes") or []) if not t.get("set_by_item_tax_template")):
 		item_tax_map[t.get("account_head")] = t.get("rate")
+
+	if tax_template:
+		template = frappe.get_cached_doc("Item Tax Template", tax_template)
+		for d in template.taxes:
+			if frappe.get_cached_value("Account", d.tax_type, "company") == doc.get("company"):
+				if d.get("not_applicable"):
+					item_tax_map[d.tax_type] = NOT_APPLICABLE_TAX
+				else:
+					item_tax_map[d.tax_type] = d.tax_rate
 
 	return json.dumps(item_tax_map) if as_json else item_tax_map
 

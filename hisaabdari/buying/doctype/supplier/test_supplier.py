@@ -7,7 +7,6 @@ from frappe.tests import UnitTestCase
 from frappe.utils import nowdate
 
 from hisaabdari.accounts.party import get_due_date
-from hisaabdari.controllers.website_list_for_contact import get_customers_suppliers
 from hisaabdari.exceptions import PartyDisabled
 from hisaabdari.tests.utils import ERPNextTestSuite
 
@@ -209,23 +208,8 @@ class TestSupplier(ERPNextTestSuite):
 		supplier.update({"on_hold": 1, "hold_type": "All"})
 		supplier.save()
 
-		quotation = {"company": "_Test Company", "transaction_date": nowdate()}
-		item = {"item_code": "_Test Item", "qty": 1, "rate": 100, "warehouse": "_Test Warehouse - _TC"}
-		rfq_item = {**item, "uom": "_Test UOM", "conversion_factor": 1, "schedule_date": nowdate()}
 		documents = [
 			lambda: make_purchase_receipt(supplier=supplier.name),
-			frappe.get_doc(
-				{"doctype": "Supplier Quotation", "supplier": supplier.name, "items": [item], **quotation}
-			).insert,
-			frappe.get_doc(
-				{
-					"doctype": "Request for Quotation",
-					"message_for_supplier": "Please quote",
-					"suppliers": [{"supplier": supplier.name}],
-					"items": [rfq_item],
-					**quotation,
-				}
-			).insert,
 		]
 		for make_document in documents:
 			self.assertRaisesRegex(frappe.ValidationError, "is blocked", make_document)
@@ -303,33 +287,6 @@ class TestSupplier(ERPNextTestSuite):
 		supplier.save()
 		self.assertEqual(supplier.country, "Greece")
 
-	def test_party_details_tax_category(self):
-		from hisaabdari.accounts.party import _get_party_details
-
-		frappe.delete_doc_if_exists("Address", "_Test Address With Tax Category-Billing")
-
-		# Tax Category without Address
-		details = _get_party_details("_Test Supplier With Tax Category", party_type="Supplier")
-		self.assertEqual(details.tax_category, "_Test Tax Category 1")
-
-		address = frappe.get_doc(
-			doctype="Address",
-			address_title="_Test Address With Tax Category",
-			tax_category="_Test Tax Category 2",
-			address_type="Billing",
-			address_line1="Station Road",
-			city="_Test City",
-			country="India",
-			links=[dict(link_doctype="Supplier", link_name="_Test Supplier With Tax Category")],
-		).insert()
-
-		# Tax Category with Address
-		details = _get_party_details("_Test Supplier With Tax Category", party_type="Supplier")
-		self.assertEqual(details.tax_category, "_Test Tax Category 2")
-
-		# Rollback
-		address.delete()
-
 	def test_dashboard_hidden_from_user_with_only_a_shared_invoice(self):
 		from hisaabdari.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
 		from hisaabdari.accounts.party import get_dashboard_info
@@ -358,7 +315,6 @@ def create_supplier(**args):
 			"supplier_name": args.supplier_name,
 			"default_currency": args.default_currency,
 			"supplier_type": args.supplier_type or "Company",
-			"tax_withholding_category": args.tax_withholding_category,
 		}
 	)
 	if not args.without_supplier_group:
@@ -376,48 +332,3 @@ def create_supplier(**args):
 	doc.insert()
 
 	return doc
-
-
-from hisaabdari.tests.utils import ERPNextTestSuite
-
-
-class TestSupplierPortal(ERPNextTestSuite):
-	def test_portal_user_can_access_supplier_data(self):
-		supplier = create_supplier()
-
-		user = frappe.generate_hash() + "@example.com"
-		frappe.new_doc(
-			"User",
-			first_name="Supplier Portal User",
-			email=user,
-			send_welcome_email=False,
-		).insert()
-
-		supplier.append("portal_users", {"user": user})
-		supplier.save()
-
-		with self.set_user(user):
-			_, suppliers = get_customers_suppliers("Purchase Order", user)
-
-			self.assertIn(supplier.name, suppliers)
-
-	def test_portal_user_contact_link(self):
-		user_email = frappe.generate_hash() + "@example.com"
-		user = frappe.new_doc("User")
-		user.email = user_email
-		user.first_name = "Test Portal Contact User"
-		user.send_welcome_email = False
-		user.insert(ignore_permissions=True)
-
-		contact = frappe.new_doc("Contact")
-		contact.first_name = "Test Portal Contact User"
-		contact.add_email(user_email, is_primary=1)
-		contact.links = []
-		contact.insert(ignore_permissions=True)
-
-		supplier = create_supplier()
-		supplier.append("portal_users", {"user": user.name})
-		supplier.save()
-
-		contact.reload()
-		self.assertTrue(contact.has_link("Supplier", supplier.name))

@@ -149,13 +149,6 @@ class TestReceivedItemsToBeBilled(ERPNextTestSuite):
 		row = self.get_row(self.run_report(), pr.name)
 		self.assertEqual((row.returned_amount, row.pending_amount), (0, 800))
 
-	def test_fixed_asset_receipt_is_listed(self):
-		pr = make_purchase_receipt(
-			item_code="Macbook Pro", qty=1, rate=50000, location="Test Location", posting_date="2026-06-01"
-		)
-
-		self.assertEqual(self.get_row(self.run_report(), pr.name).pending_amount, 50000)
-
 	def test_later_debit_note_not_updating_billing_is_ignored(self):
 		pr = make_purchase_receipt(qty=10, rate=100, posting_date="2026-06-01")
 		pi = make_pi_from_pr(pr.name)

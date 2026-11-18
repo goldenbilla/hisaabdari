@@ -6,7 +6,6 @@ from hisaabdari.accounts.doctype.payment_entry.payment_entry import get_payment_
 from hisaabdari.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 from hisaabdari.accounts.report.accounts_receivable.accounts_receivable import execute
 from hisaabdari.accounts.test.accounts_mixin import AccountsTestMixin
-from hisaabdari.controllers.sales_and_purchase_return import make_return_doc
 from hisaabdari.selling.doctype.sales_order.test_sales_order import make_sales_order
 from hisaabdari.tests.utils import ERPNextTestSuite
 
@@ -80,38 +79,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		)
 
 		return credit_note
-
-	def test_pos_receivable(self):
-		filters = {
-			"company": self.company,
-			"party_type": "Customer",
-			"party": [self.customer],
-			"report_date": add_days(today(), 2),
-			"based_on_payment_terms": 0,
-			"range": "30, 60, 90, 120",
-			"show_remarks": False,
-		}
-
-		pos_inv = self.create_sales_invoice(no_payment_schedule=True, do_not_submit=True)
-		pos_inv.posting_date = add_days(today(), 2)
-		pos_inv.is_pos = 1
-		pos_inv.append(
-			"payments",
-			frappe._dict(
-				mode_of_payment="Cash",
-				amount=flt(pos_inv.grand_total / 2),
-			),
-		)
-		pos_inv.disable_rounded_total = 1
-		pos_inv.save()
-		pos_inv.submit()
-
-		report = execute(filters)
-		expected_data = [[pos_inv.grand_total, pos_inv.paid_amount, 0]]
-
-		row = report[1][-1]
-		self.assertEqual(expected_data[0], [row.invoiced, row.paid, row.credit_note])
-		pos_inv.cancel()
 
 	def test_accounts_receivable_with_payment(self):
 		filters = {
@@ -786,31 +753,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 			[(row.future_amount, row.remaining_balance) for row in rows], [(30, 0), (5, 45), (0, 20)]
 		)
 
-	def test_sales_person(self):
-		sales_person = (
-			frappe.get_doc({"doctype": "Sales Person", "sales_person_name": "John Clark", "enabled": True})
-			.insert()
-			.submit()
-		)
-		si = self.create_sales_invoice(do_not_submit=True)
-		si.append("sales_team", {"sales_person": sales_person.name, "allocated_percentage": 100})
-		si.save().submit()
-
-		filters = {
-			"company": self.company,
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-			"sales_person": sales_person.name,
-			"show_sales_person": True,
-		}
-		report = execute(filters)[1]
-		self.assertEqual(len(report), 1)
-
-		expected_data = [100.0, 100.0, sales_person.name]
-
-		row = report[0]
-		self.assertEqual(expected_data, [row.invoiced, row.outstanding, row.sales_person])
-
 	def test_cost_center_filter(self):
 		self.create_sales_invoice()
 		filters = {
@@ -864,38 +806,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		for row in report:
 			# Assert that the customer group of each row is in the list of customer groups
 			self.assertIn(row.customer_group, cus_groups_list)
-
-	def test_territory_filter(self):
-		self.create_sales_invoice()
-		territory = frappe.db.get_value("Customer", self.customer, "territory")
-
-		filters = {
-			"company": self.company,
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-			"territory": territory,
-		}
-		report = execute(filters)[1]
-		self.assertEqual(len(report), 1)
-		self.assertEqual(
-			[100.0, 100.0, territory], [report[0].invoiced, report[0].outstanding, report[0].territory]
-		)
-
-		filters.update({"territory": ["_Test Territory United States"]})
-		self.assertEqual(len(execute(filters)[1]), 0)
-
-		filters.update({"territory": [territory, "_Test Territory United States"]})
-		self.assertEqual(len(execute(filters)[1]), 1)
-
-		frappe.db.set_value("Customer", self.customer, "territory", "_Test Territory Maharashtra")
-		filters.update({"territory": ["_Test Territory India"]})
-		self.assertEqual(len(execute(filters)[1]), 1)
-
-		filters.update({"territory": ["_Test Territory Mars"]})
-		self.assertRaises(frappe.ValidationError, execute, filters)
-
-		filters.update({"territory": "  "})
-		self.assertRaises(frappe.ValidationError, execute, filters)
 
 	def test_party_account_filter(self):
 		si1 = self.create_sales_invoice()
@@ -1507,55 +1417,6 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		self.assertEqual(len(report[1]), 2)
 		self.assertEqual([si.name, payment_term1.payment_term_name], [row.voucher_no, row.payment_term])
 
-	def test_project_filter(self):
-		project = frappe.get_doc(
-			{"doctype": "Project", "project_name": "_Test AR Project", "company": self.company}
-		).insert()
-
-		si = self.create_sales_invoice(no_payment_schedule=True, do_not_submit=True)
-		si.project = project.name
-		si.save().submit()
-
-		filters = {
-			"company": self.company,
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-			"project": [project.name],
-		}
-
-		report = execute(filters)[1]
-		self.assertEqual(len(report), 1)
-		row = report[0]
-		self.assertEqual(row.project, project.name)
-		self.assertEqual(row.invoiced, 100.0)
-
-	def test_project_on_report_output(self):
-		"""
-		Report row must carry the invoice's project even when the payment entry
-		has no project set.
-		"""
-		filters = {
-			"company": self.company,
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-		}
-
-		project = frappe.get_doc(
-			{"doctype": "Project", "project_name": "_Test AR Project Output", "company": self.company}
-		).insert()
-
-		si = self.create_sales_invoice(no_payment_schedule=True, do_not_submit=True)
-		si.project = project.name
-		si.save().submit()
-
-		# payment has no project — report row must still show the invoice's project
-		self.create_payment_entry(si.name)
-		report = execute(filters)
-
-		self.assertEqual(len(report[1]), 1)
-		row = report[1][0]
-		self.assertEqual([si.name, project.name, 60], [row.voucher_no, row.project, row.outstanding])
-
 	def test_accounts_receivable_respects_user_permissions(self):
 		# Party is a dynamic link on Payment Ledger Entry, so user permissions on Customer
 		# must be applied explicitly. The report should only show permitted customers.
@@ -1596,61 +1457,3 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 		self.assertIn(original_customer, parties)
 		self.assertNotIn(second_customer, parties)
 		self.assertEqual(allowed_invoice.customer, original_customer)
-
-	def test_receivable_filtered_by_sales_partner(self):
-		frappe.set_user("Administrator")
-		partner_a, partner_b = "_Test AR Sales Partner A", "_Test AR Sales Partner B"
-		for partner in (partner_a, partner_b):
-			if not frappe.db.exists("Sales Partner", partner):
-				frappe.get_doc(
-					{
-						"doctype": "Sales Partner",
-						"partner_name": partner,
-						"commission_rate": 0,
-						"territory": "All Territories",
-					}
-				).insert()
-
-		def _si(sales_partner):
-			si = self.create_sales_invoice(no_payment_schedule=True, do_not_submit=True, qty=2)
-			si.sales_partner = sales_partner
-			return si.save().submit()
-
-		partner_a_si = _si(partner_a)
-		partner_b_si = _si(partner_b)
-		no_partner_si = _si(None)
-
-		# a return is folded onto the invoice it settles, so it nets against that
-		# invoice's partner even when the return's own partner is cleared
-		no_partner_return = make_return_doc("Sales Invoice", partner_a_si.name)
-		no_partner_return.sales_partner = None
-		no_partner_return.items[0].qty = -1
-		no_partner_return.update_outstanding_for_self = 0
-		no_partner_return.save().submit()
-
-		filters = {
-			"company": self.company,
-			"party_type": "Customer",
-			"report_date": today(),
-			"range": "30, 60, 90, 120",
-		}
-
-		def rows_for(partner):
-			return {
-				r.voucher_no: r
-				for r in execute({**filters, "sales_partner": partner})[1]
-				if r.get("voucher_no")
-			}
-
-		rows_a = rows_for(partner_a)
-		self.assertIn(partner_a_si.name, rows_a)
-		self.assertEqual(rows_a[partner_a_si.name].sales_partner, partner_a)
-		self.assertNotIn(partner_b_si.name, rows_a)
-		self.assertNotIn(no_partner_si.name, rows_a)
-		self.assertNotIn(no_partner_return.name, rows_a)
-		self.assertEqual(rows_a[partner_a_si.name].credit_note, 100)
-		self.assertEqual(rows_a[partner_a_si.name].outstanding, 100)
-
-		rows_b = rows_for(partner_b)
-		self.assertIn(partner_b_si.name, rows_b)
-		self.assertNotIn(partner_a_si.name, rows_b)

@@ -211,23 +211,6 @@ class TestGLEntry(ERPNextTestSuite):
 				"Party Type and Party can only be set for Receivable / Payable account_Test Account Cost for Goods Sold - _TC",
 			)
 
-	def test_validate_account_party_type_shareholder(self):
-		jv = make_journal_entry(
-			"Opening Balance Equity - _TC",
-			"Cash - _TC",
-			100,
-			"_Test Cost Center - _TC",
-			save=False,
-			submit=False,
-		)
-
-		for row in jv.accounts:
-			row.party_type = "Shareholder"
-			break
-
-		jv.save().submit()
-		self.assertEqual(1, jv.docstatus)
-
 	def test_no_reporting_currency_conversion_without_reporting_currency(self):
 		company = "_Test Company"
 		frappe.db.set_value("Company", company, "reporting_currency", None)

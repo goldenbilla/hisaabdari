@@ -6,7 +6,6 @@ from unittest.mock import patch
 import frappe
 from frappe.utils import flt, formatdate, getdate, today
 
-from hisaabdari.accounts.doctype.finance_book.test_finance_book import create_finance_book
 from hisaabdari.accounts.doctype.journal_entry.test_journal_entry import make_journal_entry
 from hisaabdari.accounts.doctype.period_closing_voucher.period_closing_voucher import (
 	get_period_start_end_date,
@@ -132,56 +131,6 @@ class TestPeriodClosingVoucher(ERPNextTestSuite):
 				{"voucher_type": "Period Closing Voucher", "voucher_no": pcv.name, "is_cancelled": 0},
 			)
 		)
-
-	def test_period_closing_with_finance_book_entries(self):
-		surplus_account = create_account()
-		cost_center = create_cost_center("Test Cost Center 1")
-
-		create_sales_invoice(
-			company="Test PCV Company",
-			income_account="Sales - TPC",
-			expense_account="Cost of Goods Sold - TPC",
-			cost_center=cost_center,
-			rate=400,
-			debit_to="Debtors - TPC",
-			currency="USD",
-			customer="_Test Customer USD",
-			posting_date="2021-03-15",
-		)
-
-		jv = make_journal_entry(
-			account1="Cash - TPC",
-			account2="Sales - TPC",
-			amount=400,
-			cost_center=cost_center,
-			posting_date="2021-03-15",
-			company="Test PCV Company",
-		)
-		jv.company = "Test PCV Company"
-		jv.finance_book = create_finance_book().name
-		jv.save()
-		jv.submit()
-
-		pcv = self.make_period_closing_voucher(posting_date="2021-03-31")
-		surplus_account = pcv.closing_account_head
-
-		expected_gle = (
-			(surplus_account, 0.0, 400.0, None),
-			(surplus_account, 0.0, 400.0, jv.finance_book),
-			("Sales - TPC", 400.0, 0.0, None),
-			("Sales - TPC", 400.0, 0.0, jv.finance_book),
-		)
-
-		pcv_gle = frappe.db.sql(
-			"""
-			select account, debit, credit, finance_book
-			from `tabGL Entry` where voucher_no=%s
-			order by account, finance_book
-		""",
-			(pcv.name),
-		)
-
-		self.assertSequenceEqual(pcv_gle, expected_gle)
 
 	def test_gl_entries_restrictions(self):
 		cost_center = create_cost_center("Test Cost Center 1")

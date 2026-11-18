@@ -4,6 +4,8 @@ const COUNT = {
 	days_late: (n) => (n === 1 ? __("oldest 1 day late") : __("oldest {0} days late", [n])),
 	unapplied: (n) =>
 		n === 1 ? __("Not applied to 1 unpaid bill") : __("Not applied to {0} unpaid bills", [n]),
+	reconcile: (n) =>
+		n === 1 ? __("Reconcile with 1 unpaid bill") : __("Reconcile with {0} unpaid bills", [n]),
 	days_to_pay: (n) => (n === 1 ? __("1 day to pay") : __("{0} days to pay", [n])),
 };
 
@@ -94,7 +96,13 @@ hisaabdari.SupplierOverview = class SupplierOverview extends hisaabdari.PartyOve
 		const card = { label, value: this.money0(advances.value), onclick: () => this.open_ledger() };
 		if (!flt(advances.value)) return { ...card, caption: __("No unapplied payments") };
 		if (!unpaid_count) return { ...card, caption: __("Debit balance, no bills to apply it to") };
-		return { ...card, caption: COUNT.unapplied(unpaid_count) };
+		if (!frappe.model.can_write("Payment Reconciliation"))
+			return { ...card, caption: COUNT.unapplied(unpaid_count) };
+		return {
+			...card,
+			caption: COUNT.reconcile(unpaid_count),
+			onclick: () => this.open_reconciliation(),
+		};
 	}
 
 	trend_spec() {

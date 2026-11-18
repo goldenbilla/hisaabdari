@@ -15,28 +15,6 @@ class TestItemPrice(ERPNextTestSuite):
 	def setUp(self):
 		self.load_test_records("Item Price")
 
-	def test_template_item_price(self):
-		from hisaabdari.stock.doctype.item.test_item import make_item
-
-		item = make_item(
-			"Test Template Item 1",
-			{
-				"has_variants": 1,
-				"variant_based_on": "Manufacturer",
-			},
-		)
-
-		doc = frappe.get_doc(
-			{
-				"doctype": "Item Price",
-				"price_list": "_Test Price List",
-				"item_code": item.name,
-				"price_list_rate": 100,
-			}
-		)
-
-		self.assertRaises(frappe.ValidationError, doc.save)
-
 	def test_duplicate_item(self):
 		doc = frappe.copy_doc(self.globalTestRecords["Item Price"][0])
 		self.assertRaises(ItemPriceDuplicateItem, doc.save)

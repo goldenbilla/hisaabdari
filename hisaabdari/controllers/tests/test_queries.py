@@ -3,14 +3,9 @@ from functools import partial
 
 import frappe
 from frappe.core.doctype.user_permission.test_user_permission import create_user
-from frappe.core.doctype.user_permission.user_permission import add_user_permissions
-from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
 from hisaabdari.controllers import queries
 from hisaabdari.stock.doctype.item.test_item import make_item
-from hisaabdari.subcontracting.doctype.subcontracting_order.test_subcontracting_order import (
-	make_subcontracted_variant,
-)
 from hisaabdari.tests.permission_test_utils import as_user, make_company_fenced_user
 from hisaabdari.tests.utils import ERPNextTestSuite
 
@@ -23,18 +18,6 @@ class TestQueries(ERPNextTestSuite):
 	def assert_nested_in(self, item, container):
 		self.assertIn(item, [vals for tuples in container for vals in tuples])
 
-	def test_employee_query(self):
-		query = add_default_params(queries.employee_query, "Employee")
-
-		self.assertGreaterEqual(len(query(txt="_Test Employee")), 3)
-		self.assertGreaterEqual(len(query(txt="_Test Employee 1")), 1)
-
-	def test_lead_query(self):
-		query = add_default_params(queries.lead_query, "Lead")
-
-		self.assertGreaterEqual(len(query(txt="_Test Lead")), 4)
-		self.assertEqual(len(query(txt="_Test Lead 4")), 1)
-
 	def test_item_query(self):
 		query = add_default_params(queries.item_query, "Item")
 
@@ -44,9 +27,6 @@ class TestQueries(ERPNextTestSuite):
 		fg_item = "_Test FG Item"
 		stock_items = query(txt=fg_item, filters={"is_stock_item": 1})
 		self.assert_nested_in("_Test FG Item", stock_items)
-
-		bundled_stock_items = query(txt="_test product bundle item 5", filters={"is_stock_item": 1})
-		self.assertEqual(len(bundled_stock_items), 0)
 
 		# empty customer/supplier should be stripped of instead of failure
 		query(txt="", filters={"customer": None})
@@ -77,61 +57,6 @@ class TestQueries(ERPNextTestSuite):
 			items = queries.item_query("Item", item.name, "name", 0, 20, {})
 
 		self.assertIn(item.name, [row[0] for row in items])
-
-	def test_item_manufacturer_query_requires_item_read_permission(self):
-		item = make_item("Steel Sheet With Manufacturer", {"is_stock_item": 1})
-		if not frappe.db.exists("Manufacturer", "Northwind Steel"):
-			frappe.get_doc({"doctype": "Manufacturer", "short_name": "Northwind Steel"}).insert()
-		frappe.get_doc(
-			{
-				"doctype": "Item Manufacturer",
-				"item_code": item.name,
-				"manufacturer": "Northwind Steel",
-				"manufacturer_part_no": "NS-4242",
-			}
-		).insert()
-
-		query = add_default_params(queries.item_manufacturer_query, "Manufacturer")
-		purchase_user = create_user("item_manufacturer_purchase_user@example.com", "Purchase User")
-		website_manager = create_user("item_manufacturer_website_manager@example.com", "Website Manager")
-
-		with self.set_user(purchase_user.name):
-			self.assertEqual(query(filters={"item_code": item.name}), (("Northwind Steel", "NS-4242"),))
-
-		with self.set_user(website_manager.name), self.assertRaises(frappe.PermissionError):
-			query(filters={"item_code": item.name})
-
-	def test_item_manufacturer_query_needs_a_single_item_code(self):
-		query = add_default_params(queries.item_manufacturer_query, "Manufacturer")
-		purchase_user = create_user("item_manufacturer_purchase_user@example.com", "Purchase User")
-		website_manager = create_user("item_manufacturer_website_manager@example.com", "Website Manager")
-
-		for filters in ({}, {"item_code": None}, {"item_code": ""}, {"item_code": ["like", "%"]}):
-			for user in (purchase_user.name, website_manager.name):
-				with self.subTest(filters=filters, user=user), self.set_user(user):
-					self.assertEqual(query(filters=filters), [])
-
-	def test_subcontracted_item_query(self):
-		variant, _ = make_subcontracted_variant()
-		item_without_bom = make_item(
-			"Subcontracted Item Without BOM", {"is_stock_item": 1, "is_sub_contracted_item": 1}
-		)
-		query = add_default_params(queries.subcontracted_item_query, "Item")
-
-		items = query(txt="Subcontracted", page_len=100)
-
-		self.assert_nested_in(variant.name, items)
-		self.assertNotIn(item_without_bom.name, [row[0] for row in items])
-
-	def test_bom_qury(self):
-		query = add_default_params(queries.bom, "BOM")
-
-		self.assertGreaterEqual(len(query(txt="_Test Item Home Desktop Manufactured")), 1)
-
-	def test_project_query(self):
-		query = add_default_params(queries.get_project_name, "Project")
-
-		self.assertGreaterEqual(len(query(txt="_Test Project")), 1)
 
 	def test_tax_template_query_requires_item_read_permission(self):
 		query = add_default_params(queries.get_tax_template, "Item Tax Template")
@@ -315,49 +240,3 @@ class TestQueries(ERPNextTestSuite):
 
 	def test_default_uoms(self):
 		self.assertGreaterEqual(frappe.db.count("UOM", {"enabled": 1}), 10)
-
-	def test_employee_query_with_user_permissions(self):
-		employee = frappe.db.get_all("Employee", {"first_name": "_Test Employee"})[0].name
-
-		# party field is a dynamic link field in Payment Entry doctype with ignore_user_permissions=0
-		ps = make_property_setter(
-			doctype="Payment Entry",
-			fieldname="party",
-			property="ignore_user_permissions",
-			value=1,
-			property_type="Check",
-		)
-
-		user = create_user("test_employee_query@example.com", "Accounts User", "HR User")
-		add_user_permissions(
-			{
-				"user": user.name,
-				"doctype": "Employee",
-				"docname": employee,
-				"is_default": 1,
-				"apply_to_all_doctypes": 1,
-				"applicable_doctypes": [],
-				"hide_descendants": 0,
-			}
-		)
-
-		with ERPNextTestSuite.set_user(self, user.name):
-			params = {
-				"doctype": "Employee",
-				"txt": "",
-				"searchfield": "name",
-				"start": 0,
-				"page_len": 20,
-				"filters": None,
-				"reference_doctype": "Payment Entry",
-				"ignore_user_permissions": 1,
-			}
-
-			result = queries.employee_query(**params)
-			self.assertGreater(len(result), 1)
-
-			ps.delete(ignore_permissions=1, force=1, delete_permanently=1)
-
-			# only one employee should be returned even though ignore_user_permissions is passed as 1
-			result = queries.employee_query(**params)
-			self.assertEqual(len(result), 1)

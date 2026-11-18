@@ -134,25 +134,6 @@ class TestExpensesAddedToStock(ERPNextTestSuite):
 		self.assertEqual(debits[self.eats_account], 500)
 		self.assertEqual(credits[self.eats_contra_account], 500)
 
-	def test_landed_cost_voucher_books_pair(self):
-		from hisaabdari.stock.doctype.landed_cost_voucher.test_landed_cost_voucher import (
-			create_landed_cost_voucher,
-		)
-		from hisaabdari.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
-
-		pr = make_purchase_receipt(
-			company=COMPANY, warehouse=WAREHOUSE, item_code=self.item, qty=10, rate=100
-		)
-
-		_balances, debits, credits = self.get_gl_balances("Purchase Receipt", pr.name)
-		self.assertEqual(debits[self.eats_account], 0)
-
-		create_landed_cost_voucher("Purchase Receipt", pr.name, COMPANY, charges=200)
-
-		_balances, debits, credits = self.get_gl_balances("Purchase Receipt", pr.name)
-		self.assertEqual(debits[self.eats_account], 200)
-		self.assertEqual(credits[self.eats_contra_account], 200)
-
 	def test_no_entries_when_feature_disabled(self):
 		frappe.db.set_single_value("Accounts Settings", "book_stock_expense_gl_entries", 0)
 

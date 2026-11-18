@@ -68,6 +68,7 @@ class TestAccountingPeriod(ERPNextTestSuite):
 		user.save(ignore_permissions=True)
 		frappe.clear_cache(user=user.name)
 
+		self.addCleanup(frappe.set_user, "Administrator")
 		frappe.set_user(user.name)
 		posting_date = "2025-12-11"
 		doc = create_sales_invoice(

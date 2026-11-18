@@ -94,7 +94,6 @@ class TestAccountsPayableSummary(ERPNextTestSuite):
 			"range5": 0.0,
 			"total_due": 200.0,
 			"future_amount": 0.0,
-			"sales_person": [],
 			"currency": pi.currency,
 			"supplier_group": supplier_group,
 		}

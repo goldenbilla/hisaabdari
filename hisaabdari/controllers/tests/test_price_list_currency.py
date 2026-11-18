@@ -62,9 +62,8 @@ class TestPriceListCurrency(UnitTestCase):
 		from hisaabdari.stock.get_item_details import get_price_list_currency_and_exchange_rate
 
 		cases = {
-			"Supplier Quotation": "for_buying",
-			"Material Request": "for_buying",
-			"POS Invoice": "for_selling",
+			"Purchase Order": "for_buying",
+			"Purchase Invoice": "for_buying",
 			"Sales Invoice": "for_selling",
 		}
 		for doctype, expected_side in cases.items():

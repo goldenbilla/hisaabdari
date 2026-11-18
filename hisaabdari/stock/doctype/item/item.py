@@ -60,6 +60,7 @@ class Item(Document):
 		from hisaabdari.stock.doctype.item_default.item_default import ItemDefault
 		from hisaabdari.stock.doctype.item_reorder.item_reorder import ItemReorder
 		from hisaabdari.stock.doctype.item_supplier.item_supplier import ItemSupplier
+		from hisaabdari.stock.doctype.item_tax.item_tax import ItemTax
 		from hisaabdari.stock.doctype.uom_conversion_detail.uom_conversion_detail import UOMConversionDetail
 
 		allow_negative_stock: DF.Check
@@ -106,6 +107,7 @@ class Item(Document):
 		standard_rate: DF.Currency
 		stock_uom: DF.Link
 		supplier_items: DF.Table[ItemSupplier]
+		taxes: DF.Table[ItemTax]
 		total_projected_qty: DF.Float
 		uoms: DF.Table[UOMConversionDetail]
 		use_serial_no_wise_valuation: DF.Check
@@ -189,6 +191,7 @@ class Item(Document):
 			self.validate_opening_stock()
 		self.validate_shelf_life()
 		self.fill_customer_code()
+		self.check_item_tax()
 		self.validate_barcode()
 		self.validate_warehouse_for_reorder()
 		self.clear_retain_sample()
@@ -202,6 +205,7 @@ class Item(Document):
 		self.validate_serialized_change_with_bundle()
 		self.validate_serial_no_wise_valuation()
 		self.set_valuation_method_for_serial_no_wise_valuation()
+		self.validate_item_tax_net_rate_range()
 
 		if not self.is_new():
 			self.old_item_group = frappe.db.get_value(self.doctype, self.name, "item_group")
@@ -401,6 +405,17 @@ class Item(Document):
 		if self.stock_uom not in uoms_list:
 			self.append("uoms", {"uom": self.stock_uom, "conversion_factor": 1})
 
+	def validate_item_tax_net_rate_range(self):
+		for tax in self.get("taxes"):
+			if flt(tax.maximum_net_rate) < flt(tax.minimum_net_rate):
+				frappe.throw(
+					_("Taxes row #{0}: {1} cannot be smaller than {2}").format(
+						tax.idx,
+						bold(_(tax.meta.get_label("maximum_net_rate"))),
+						bold(_(tax.meta.get_label("minimum_net_rate"))),
+					)
+				)
+
 	def validate_conversion_factor(self):
 		check_list = []
 		for d in self.get("uoms"):
@@ -452,6 +467,21 @@ class Item(Document):
 						indicator="yellow",
 						alert=True,
 					)
+
+	def check_item_tax(self):
+		"""Check whether Tax Rate is not entered twice for same Tax Type"""
+		check_list = []
+		for d in self.get("taxes"):
+			if d.item_tax_template:
+				if d.item_tax_template in check_list:
+					frappe.throw(
+						_("{0} entered twice {1} in Item Taxes").format(
+							frappe.bold(d.item_tax_template),
+							"",
+						)
+					)
+				else:
+					check_list.append(d.item_tax_template)
 
 	def fill_customer_code(self):
 		"""

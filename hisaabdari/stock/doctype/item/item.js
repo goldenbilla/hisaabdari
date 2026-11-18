@@ -53,6 +53,7 @@ frappe.ui.form.on("Item", {
 		frm.set_query("allowed_companies", () => ({
 			query: "hisaabdari.stock.doctype.company_restriction.company_restriction.company_query",
 		}));
+		frm.add_fetch("tax_type", "tax_rate", "tax_rate");
 
 		frm.make_methods = {
 			Quotation: () => {
@@ -418,6 +419,15 @@ $.extend(hisaabdari.item, {
 					is_group: 0,
 					company: row.company,
 				},
+			};
+		};
+
+		frm.fields_dict["taxes"].grid.get_field("tax_type").get_query = function (doc, cdt, cdn) {
+			return {
+				filters: [
+					["Account", "account_type", "in", "Tax, Chargeable, Income Account, Expense Account"],
+					["Account", "docstatus", "!=", 2],
+				],
 			};
 		};
 

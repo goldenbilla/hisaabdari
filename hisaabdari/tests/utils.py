@@ -90,7 +90,6 @@ class BootStrapTestData:
 		from hisaabdari.setup.setup_wizard.operations.install_fixtures import (
 			add_uom_data,
 			get_preset_records,
-			get_sale_stages,
 		)
 
 		update_genders()
@@ -106,19 +105,11 @@ class BootStrapTestData:
 		presets_primary_key_map = {
 			"Address Template": "country",
 			"Item Group": "item_group_name",
-			"Territory": "territory_name",
 			"Customer Group": "customer_group_name",
 			"Supplier Group": "supplier_group_name",
-			"Sales Person": "sales_person_name",
 			"Mode of Payment": "mode_of_payment",
-			"Activity Type": "activity_type",
-			"Item Attribute": "attribute_name",
 			"Party Type": "party_type",
-			"Project Type": "project_type",
 			"Print Heading": "print_heading",
-			"Share Type": "title",
-			"Market Segment": "market_segment",
-			"Workstation Operating Component": "component_name",
 		}
 		for x in records:
 			dt = x.get("doctype")
@@ -129,42 +120,21 @@ class BootStrapTestData:
 				doc.insert()
 
 		add_uom_data()
-		# add sale stages
-		for sales_stage in get_sale_stages():
-			if not frappe.db.exists("Sales Stage", {"stage_name": sales_stage.get("stage_name")}):
-				frappe.get_doc(sales_stage).insert()
-
-		from hisaabdari.buying.doctype.supplier_scorecard.supplier_scorecard import (
-			get_default_scorecard_standing,
-			get_default_scorecard_variables,
-		)
-
-		for x in get_default_scorecard_variables():
-			x["doctype"] = "Supplier Scorecard Variable"
-			if not frappe.db.exists("Supplier Scorecard Variable", {"name": x.get("variable_label")}):
-				frappe.get_doc(x).insert()
-		for x in get_default_scorecard_standing():
-			x["doctype"] = "Supplier Scorecard Standing"
-			if not frappe.db.exists("Supplier Scorecard Standing", {"name": x.get("standing_name")}):
-				frappe.get_doc(x).insert()
 
 		frappe.db.commit()  # nosemgrep
 
 	def make_master_data(self):
 		self.update_system_settings()
 		self.make_fiscal_year()
-		self.make_holiday_list()
 		self.make_company()
 		self.make_test_account()
 		self.make_supplier_group()
+		self.make_currency_exchange()
 		self.make_payment_term()
 		self.make_payment_terms_template()
-		self.make_tax_category()
 		self.make_account()
 		self.make_supplier()
 		self.make_role()
-		self.make_department()
-		self.make_territory()
 		self.make_customer_group()
 		self.make_customer()
 		self.make_user()
@@ -173,53 +143,17 @@ class BootStrapTestData:
 		self.make_uom()
 		self.make_item_tax_template()
 		self.make_item_group()
-		self.make_item_attribute()
-		self.make_asset_maintenance_team()
-		self.make_asset_category()
 		self.update_stock_settings()
 		self.make_item()
-		self.make_product_bundle()
-		self.make_location()
 		self.make_price_list()
 		self.make_item_price()
-		self.make_loyalty_program()
-		self.make_shareholder()
 		self.make_sales_taxes_template()
 		self.make_purchase_taxes_template()
-		self.make_workstation()
-		self.make_operation()
-		self.make_bom()
-		self.make_quality_inspection_param()
-		self.make_quality_inspection_template()
-		self.make_employees()
-		self.make_brand()
-		self.make_monthly_distribution()
-		self.make_projects()
-		self.make_dunning_type()
-		self.make_finance_book()
-		self.make_leads()
-		self.make_sales_person()
-		self.make_sales_partner()
-		self.make_activity_type()
 		self.make_address()
 		self.make_contact()
-		self.update_support_settings()
 		self.update_selling_settings()
 
 		frappe.db.commit()  # nosemgrep
-
-		# DDL commands have implicit commit
-		# Dimensions
-		self.make_dimensions()
-
-		# custom doctype
-		self.make_custom_doctype()
-
-		# data on custom doctype
-		self.make_shelf()
-		self.make_rack()
-		self.make_inv_site()
-		self.make_store()
 
 		# custom field
 		self.make_custom_field()
@@ -232,11 +166,6 @@ class BootStrapTestData:
 		system_settings.rounding_method = "Banker's Rounding"
 		system_settings.save()
 
-	def update_support_settings(self):
-		support_settings = frappe.get_doc("Support Settings")
-		support_settings.track_service_level_agreement = True
-		support_settings.save()
-
 	def update_selling_settings(self):
 		selling_settings = frappe.get_doc("Selling Settings")
 		selling_settings.selling_price_list = "Standard Selling"
@@ -247,7 +176,6 @@ class BootStrapTestData:
 		stock_settings.item_naming_by = "Item Code"
 		stock_settings.valuation_method = "FIFO"
 		stock_settings.stock_uom = "Nos"
-		stock_settings.auto_indent = 1
 		stock_settings.auto_insert_price_list_rate_if_missing = 1
 		stock_settings.update_price_list_based_on = "Rate"
 		stock_settings.enable_serial_and_batch_no_for_item = 1
@@ -337,41 +265,6 @@ class BootStrapTestData:
 		]
 		self.make_records(["price_list_name", "enabled", "selling", "buying", "currency"], records)
 
-	def make_monthly_distribution(self):
-		records = [
-			{
-				"doctype": "Monthly Distribution",
-				"distribution_id": "_Test Distribution",
-				"fiscal_year": "_Test Fiscal Year 2013",
-				"percentages": [
-					{"month": "January", "percentage_allocation": "8"},
-					{"month": "February", "percentage_allocation": "8"},
-					{"month": "March", "percentage_allocation": "8"},
-					{"month": "April", "percentage_allocation": "8"},
-					{"month": "May", "percentage_allocation": "8"},
-					{"month": "June", "percentage_allocation": "8"},
-					{"month": "July", "percentage_allocation": "8"},
-					{"month": "August", "percentage_allocation": "8"},
-					{"month": "September", "percentage_allocation": "8"},
-					{"month": "October", "percentage_allocation": "8"},
-					{"month": "November", "percentage_allocation": "10"},
-					{"month": "December", "percentage_allocation": "10"},
-				],
-			}
-		]
-		self.make_records(["distribution_id"], records)
-
-	def make_projects(self):
-		records = [
-			{
-				"doctype": "Project",
-				"company": "_Test Company",
-				"project_name": "_Test Project",
-				"status": "Open",
-			}
-		]
-		self.make_records(["project_name"], records)
-
 	def make_customer_group(self):
 		records = [
 			{
@@ -388,58 +281,6 @@ class BootStrapTestData:
 			},
 		]
 		self.make_records(["customer_group_name"], records)
-
-	def make_territory(self):
-		records = [
-			{
-				"doctype": "Territory",
-				"is_group": 0,
-				"parent_territory": "All Territories",
-				"territory_name": "_Test Territory",
-			},
-			{
-				"doctype": "Territory",
-				"is_group": 1,
-				"parent_territory": "All Territories",
-				"territory_name": "_Test Territory India",
-			},
-			{
-				"doctype": "Territory",
-				"is_group": 0,
-				"parent_territory": "_Test Territory India",
-				"territory_name": "_Test Territory Maharashtra",
-			},
-			{
-				"doctype": "Territory",
-				"is_group": 0,
-				"parent_territory": "All Territories",
-				"territory_name": "_Test Territory Rest Of The World",
-			},
-			{
-				"doctype": "Territory",
-				"is_group": 0,
-				"parent_territory": "All Territories",
-				"territory_name": "_Test Territory United States",
-			},
-		]
-		self.make_records(["territory_name"], records)
-
-	def make_department(self):
-		records = [
-			{
-				"doctype": "Department",
-				"department_name": "_Test Department",
-				"company": "_Test Company",
-				"parent_department": "All Departments",
-			},
-			{
-				"doctype": "Department",
-				"department_name": "_Test Department 1",
-				"company": "_Test Company",
-				"parent_department": "All Departments",
-			},
-		]
-		self.make_records(["department_name"], records)
 
 	def make_role(self):
 		records = [
@@ -549,154 +390,6 @@ class BootStrapTestData:
 		]
 		self.make_records(["email"], records)
 
-	def make_employees(self):
-		records = [
-			{
-				"company": "_Test Company",
-				"date_of_birth": "1980-01-01",
-				"date_of_joining": "2010-01-01",
-				"department": "_Test Department - _TC",
-				"doctype": "Employee",
-				"first_name": "_Test Employee",
-				"gender": "Female",
-				"naming_series": "_T-Employee-",
-				"status": "Active",
-				"user_id": "test@example.com",
-			},
-			{
-				"company": "_Test Company",
-				"date_of_birth": "1980-01-01",
-				"date_of_joining": "2010-01-01",
-				"department": "_Test Department 1 - _TC",
-				"doctype": "Employee",
-				"first_name": "_Test Employee 1",
-				"gender": "Male",
-				"naming_series": "_T-Employee-",
-				"status": "Active",
-				"user_id": "test1@example.com",
-			},
-			{
-				"company": "_Test Company",
-				"date_of_birth": "1980-01-01",
-				"date_of_joining": "2010-01-01",
-				"department": "_Test Department 1 - _TC",
-				"doctype": "Employee",
-				"first_name": "_Test Employee 2",
-				"gender": "Male",
-				"naming_series": "_T-Employee-",
-				"status": "Active",
-				"user_id": "test2@example.com",
-			},
-		]
-		self.make_records(["first_name"], records)
-
-	def make_sales_person(self):
-		records = [
-			{
-				"doctype": "Sales Person",
-				"employee": "_T-Employee-00001",
-				"is_group": 0,
-				"parent_sales_person": "Sales Team",
-				"sales_person_name": "_Test Sales Person",
-			},
-			{
-				"doctype": "Sales Person",
-				"employee": "_T-Employee-00002",
-				"is_group": 0,
-				"parent_sales_person": "Sales Team",
-				"sales_person_name": "_Test Sales Person 1",
-			},
-			{
-				"doctype": "Sales Person",
-				"employee": "_T-Employee-00003",
-				"is_group": 0,
-				"parent_sales_person": "Sales Team",
-				"sales_person_name": "_Test Sales Person 2",
-			},
-		]
-		self.make_records(["sales_person_name"], records)
-
-	def make_sales_partner(self):
-		records = [
-			{
-				"doctype": "Sales Partner",
-				"partner_name": "_Test Sales Partner India - 1",
-				"commission_rate": 7,
-				"territory": "_Test Territory India",
-			},
-			{
-				"doctype": "Sales Partner",
-				"partner_name": "_Test Sales Partner India - 2",
-				"commission_rate": 5,
-				"territory": "_Test Territory India",
-			},
-			{
-				"doctype": "Sales Partner",
-				"partner_name": "_Test Sales Partner Global - 1",
-				"commission_rate": 8,
-				"territory": "_Test Territory Rest Of The World",
-			},
-		]
-		self.make_records(["partner_name"], records)
-
-	def make_leads(self):
-		records = [
-			{
-				"doctype": "Lead",
-				"email_id": "test_lead@example.com",
-				"lead_name": "_Test Lead",
-				"status": "Open",
-				"territory": "_Test Territory",
-				"naming_series": "_T-Lead-",
-			},
-			{
-				"doctype": "Lead",
-				"email_id": "test_lead1@example.com",
-				"lead_name": "_Test Lead 1",
-				"status": "Open",
-				"naming_series": "_T-Lead-",
-			},
-			{
-				"doctype": "Lead",
-				"email_id": "test_lead2@example.com",
-				"lead_name": "_Test Lead 2",
-				"status": "Lead",
-				"naming_series": "_T-Lead-",
-			},
-			{
-				"doctype": "Lead",
-				"email_id": "test_lead3@example.com",
-				"lead_name": "_Test Lead 3",
-				"status": "Converted",
-				"naming_series": "_T-Lead-",
-			},
-			{
-				"doctype": "Lead",
-				"email_id": "test_lead4@example.com",
-				"lead_name": "_Test Lead 4",
-				"company_name": "_Test Lead 4",
-				"status": "Open",
-				"naming_series": "_T-Lead-",
-			},
-		]
-		self.make_records(["email_id"], records)
-
-	def make_holiday_list(self):
-		records = [
-			{
-				"doctype": "Holiday List",
-				"from_date": "2013-01-01",
-				"to_date": "2013-12-31",
-				"holidays": [
-					{"description": "New Year", "holiday_date": "2013-01-01"},
-					{"description": "Republic Day", "holiday_date": "2013-01-26"},
-					{"description": "Test Holiday", "holiday_date": "2013-02-01"},
-				],
-				"holiday_list_name": "_Test Holiday List",
-			}
-		]
-		self.make_records(["holiday_list_name"], records)
-
 	def make_company(self):
 		records = load_test_records_for("Company")["Company"]
 		self.make_records(["company_name"], records)
@@ -726,6 +419,28 @@ class BootStrapTestData:
 
 		key = ["year_start_date", "year_end_date"]
 		self.make_records(key, records)
+
+	def make_currency_exchange(self):
+		# Upstream tests got missing rates from a public rates service. That fetch is not part of
+		# HisaabDari, so old-dated baseline rates stand in; any newer record a test creates wins.
+		inr_value = {"USD": 80.0, "EUR": 90.0, "GBP": 100.0, "INR": 1.0}
+		records = []
+		for from_currency, from_value in inr_value.items():
+			for to_currency, to_value in inr_value.items():
+				if from_currency == to_currency:
+					continue
+				records.append(
+					{
+						"doctype": "Currency Exchange",
+						"date": "2000-01-01",
+						"from_currency": from_currency,
+						"to_currency": to_currency,
+						"exchange_rate": from_value / to_value,
+						"for_buying": 1,
+						"for_selling": 1,
+					}
+				)
+		self.make_records(["date", "from_currency", "to_currency"], records)
 
 	def make_payment_term(self):
 		records = [
@@ -827,14 +542,6 @@ class BootStrapTestData:
 		]
 		self.make_records(["template_name"], records)
 
-	def make_tax_category(self):
-		records = [
-			{"doctype": "Tax Category", "name": "_Test Tax Category 1", "title": "_Test Tax Category 1"},
-			{"doctype": "Tax Category", "name": "_Test Tax Category 2", "title": "_Test Tax Category 2"},
-			{"doctype": "Tax Category", "name": "_Test Tax Category 3", "title": "_Test Tax Category 3"},
-		]
-		self.make_records(["title"], records)
-
 	def make_account(self):
 		records = [
 			{
@@ -911,7 +618,6 @@ class BootStrapTestData:
 				"doctype": "Supplier",
 				"supplier_name": "_Test Supplier With Tax Category",
 				"supplier_group": "_Test Supplier Group",
-				"tax_category": "_Test Tax Category 1",
 			},
 			{
 				"doctype": "Supplier",
@@ -967,50 +673,6 @@ class BootStrapTestData:
 			},
 		]
 		self.make_records(["cost_center_name", "company"], records)
-
-	def make_location(self):
-		records = [
-			{"doctype": "Location", "location_name": "Test Location"},
-			{"doctype": "Location", "location_name": "Test Location 2"},
-			{"doctype": "Location", "location_name": "Test Location Area", "is_group": 1, "is_container": 1},
-			{
-				"doctype": "Location",
-				"location_name": "Basil Farm",
-				"location": '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"point_type":"circle","radius":884.5625420736483},"geometry":{"type":"Point","coordinates":[72.875834,19.100566]}}]}',
-				"parent_location": "Test Location Area",
-				"parent": "Test Location Area",
-				"is_group": 1,
-				"is_container": 1,
-			},
-			{
-				"doctype": "Location",
-				"location_name": "Division 1",
-				"location": '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"point_type":"circle","radius":542.3424997060739},"geometry":{"type":"Point","coordinates":[72.852359,19.11557]}}]}',
-				"parent_location": "Basil Farm",
-				"parent": "Basil Farm",
-				"is_group": 1,
-				"is_container": 1,
-			},
-			{
-				"doctype": "Location",
-				"location_name": "Field 1",
-				"location": '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[72.846758,19.118287],[72.846758,19.121206],[72.850535,19.121206],[72.850535,19.118287],[72.846758,19.118287]]]}}]}',
-				"parent_location": "Division 1",
-				"parent": "Division 1",
-				"is_group": 1,
-				"is_container": 1,
-			},
-			{
-				"doctype": "Location",
-				"location_name": "Block 1",
-				"location": '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[72.921495,19.073313],[72.924929,19.068121],[72.934713,19.06585],[72.929392,19.05579],[72.94158,19.056926],[72.951365,19.095213],[72.921495,19.073313]]]}}]}',
-				"parent_location": "Field 1",
-				"parent": "Field 1",
-				"is_group": 0,
-				"is_container": 1,
-			},
-		]
-		self.make_records(["location_name"], records)
 
 	def make_warehouse(self):
 		records = [
@@ -1097,34 +759,6 @@ class BootStrapTestData:
 			{"doctype": "UOM", "uom_name": "_Test UOM 1"},
 		]
 		self.make_records(["uom_name"], records)
-
-	def make_item_attribute(self):
-		records = [
-			{
-				"doctype": "Item Attribute",
-				"attribute_name": "Test Size",
-				"priority": 1,
-				"item_attribute_values": [
-					{"attribute_value": "Extra Small", "abbr": "XSL"},
-					{"attribute_value": "Small", "abbr": "S"},
-					{"attribute_value": "Medium", "abbr": "M"},
-					{"attribute_value": "Large", "abbr": "L"},
-					{"attribute_value": "Extra Large", "abbr": "XL"},
-					{"attribute_value": "2XL", "abbr": "2XL"},
-				],
-			},
-			{
-				"doctype": "Item Attribute",
-				"attribute_name": "Test Colour",
-				"priority": 2,
-				"item_attribute_values": [
-					{"attribute_value": "Red", "abbr": "R"},
-					{"attribute_value": "Green", "abbr": "G"},
-					{"attribute_value": "Blue", "abbr": "B"},
-				],
-			},
-		]
-		self.make_records(["attribute_name"], records)
 
 	def make_item_tax_template(self):
 		records = [
@@ -1294,13 +928,6 @@ class BootStrapTestData:
 						"doctype": "Item Tax",
 						"parentfield": "taxes",
 						"item_tax_template": "_Test Account Excise Duty @ 10 - _TC",
-						"tax_category": "",
-					},
-					{
-						"doctype": "Item Tax",
-						"parentfield": "taxes",
-						"item_tax_template": "_Test Account Excise Duty @ 12 - _TC",
-						"tax_category": "_Test Tax Category 1",
 					},
 				],
 			},
@@ -1314,7 +941,6 @@ class BootStrapTestData:
 						"doctype": "Item Tax",
 						"parentfield": "taxes",
 						"item_tax_template": "_Test Account Excise Duty @ 15 - _TC",
-						"tax_category": "",
 					}
 				],
 			},
@@ -1330,7 +956,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item",
 				"item_group": "_Test Item Group",
 				"item_name": "_Test Item",
@@ -1369,7 +994,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item 2",
 				"item_group": "_Test Item Group",
 				"item_name": "_Test Item 2",
@@ -1394,7 +1018,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item Home Desktop 100",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test Item Home Desktop 100",
@@ -1424,7 +1047,6 @@ class BootStrapTestData:
 				"has_batch_no": 0,
 				"has_serial_no": 0,
 				"inspection_required": 0,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item Home Desktop 200",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test Item Home Desktop 200",
@@ -1447,7 +1069,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 0,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Product Bundle Item",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test Product Bundle Item",
@@ -1470,7 +1091,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 1,
 				"item_code": "_Test FG Item",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test FG Item",
@@ -1493,7 +1113,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 0,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Non Stock Item",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test Non Stock Item",
@@ -1516,7 +1135,6 @@ class BootStrapTestData:
 				"has_serial_no": 1,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Serialized Item",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test Serialized Item",
@@ -1539,7 +1157,6 @@ class BootStrapTestData:
 				"has_serial_no": 1,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Serialized Item With Series",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test Serialized Item With Series",
@@ -1563,7 +1180,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item Home Desktop Manufactured",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test Item Home Desktop Manufactured",
@@ -1586,7 +1202,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 1,
 				"item_code": "_Test FG Item 2",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test FG Item 2",
@@ -1609,12 +1224,10 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 1,
 				"item_code": "_Test Variant Item",
 				"item_group": "_Test Item Group Desktops",
 				"item_name": "_Test Variant Item",
 				"stock_uom": "_Test UOM",
-				"has_variants": 1,
 				"item_defaults": [
 					{
 						"company": "_Test Company",
@@ -1625,7 +1238,6 @@ class BootStrapTestData:
 						"income_account": "Sales - _TC",
 					}
 				],
-				"attributes": [{"attribute": "Test Size"}],
 				"apply_warehouse_wise_reorder_level": 1,
 				"reorder_levels": [
 					{
@@ -1643,7 +1255,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item Warehouse Group Wise Reorder",
 				"item_group": "_Test Item Group",
 				"item_name": "_Test Item Warehouse Group Wise Reorder",
@@ -1676,7 +1287,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item With Item Tax Template",
 				"item_group": "_Test Item Group",
 				"item_name": "_Test Item With Item Tax Template",
@@ -1697,12 +1307,6 @@ class BootStrapTestData:
 						"parentfield": "taxes",
 						"item_tax_template": "_Test Account Excise Duty @ 10 - _TC",
 					},
-					{
-						"doctype": "Item Tax",
-						"parentfield": "taxes",
-						"item_tax_template": "_Test Account Excise Duty @ 12 - _TC",
-						"tax_category": "_Test Tax Category 1",
-					},
 				],
 			},
 			{
@@ -1712,7 +1316,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item Inherit Group Item Tax Template 1",
 				"item_group": "_Test Item Group Tax Parent",
 				"item_name": "_Test Item Inherit Group Item Tax Template 1",
@@ -1735,7 +1338,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item Inherit Group Item Tax Template 2",
 				"item_group": "_Test Item Group Tax Child Override",
 				"item_name": "_Test Item Inherit Group Item Tax Template 2",
@@ -1758,7 +1360,6 @@ class BootStrapTestData:
 				"has_serial_no": 0,
 				"inspection_required": 0,
 				"is_stock_item": 1,
-				"is_sub_contracted_item": 0,
 				"item_code": "_Test Item Override Group Item Tax Template",
 				"item_group": "_Test Item Group Tax Child Override",
 				"item_name": "_Test Item Override Group Item Tax Template",
@@ -1779,12 +1380,6 @@ class BootStrapTestData:
 						"parentfield": "taxes",
 						"item_tax_template": "_Test Account Excise Duty @ 20 - _TC",
 					},
-					{
-						"doctype": "Item Tax",
-						"parentfield": "taxes",
-						"tax_category": "_Test Tax Category 1",
-						"item_tax_template": "_Test Item Tax Template 1 - _TC",
-					},
 				],
 			},
 			{
@@ -1794,19 +1389,6 @@ class BootStrapTestData:
 				"item_code": "138-CMS Shoe",
 				"item_group": "_Test Item Group",
 				"item_name": "138-CMS Shoe",
-				"stock_uom": "_Test UOM",
-			},
-			{
-				"doctype": "Item",
-				"item_code": "Photocopier",
-				"item_name": "Photocopier",
-				"item_group": "All Item Groups",
-				"company": "_Test Company",
-				"is_fixed_asset": 1,
-				"is_stock_item": 0,
-				"asset_category": "Equipment",
-				"auto_create_assets": 1,
-				"asset_naming_series": "ABC.###",
 				"stock_uom": "_Test UOM",
 			},
 			{
@@ -1871,32 +1453,6 @@ class BootStrapTestData:
 			},
 			{
 				"doctype": "Item",
-				"item_code": "Test Asset Item",
-				"item_name": "Test Asset Item",
-				"is_stock_item": 0,
-				"item_group": "All Item Groups",
-				"stock_uom": "Box",
-				"is_fixed_asset": 1,
-				"auto_create_assets": 1,
-				"asset_category": "Equipment",
-				"asset_naming_series": "ABC.###",
-			},
-			{
-				"doctype": "Item",
-				"item_code": "Macbook Pro",
-				"item_name": "Macbook Pro",
-				"description": "Macbook Pro Retina Display",
-				"asset_category": "Computers",
-				"item_group": "All Item Groups",
-				"stock_uom": "Nos",
-				"is_stock_item": 0,
-				"is_fixed_asset": 1,
-				"auto_create_assets": 1,
-				"is_grouped_asset": 0,
-				"asset_naming_series": "ACC-ASS-.YYYY.-",
-			},
-			{
-				"doctype": "Item",
 				"item_code": "_Test Stock Item",
 				"item_name": "Test Stock Item",
 				"is_stock_item": 1,
@@ -1914,29 +1470,6 @@ class BootStrapTestData:
 			},
 		]
 		self.make_records(["item_code", "item_name"], records)
-
-	def make_product_bundle(self):
-		records = [
-			{
-				"doctype": "Product Bundle",
-				"new_item_code": "_Test Product Bundle Item",
-				"items": [
-					{
-						"doctype": "Product Bundle Item",
-						"item_code": "_Test Item",
-						"parentfield": "items",
-						"qty": 5.0,
-					},
-					{
-						"doctype": "Product Bundle Item",
-						"item_code": "_Test Item Home Desktop 100",
-						"parentfield": "items",
-						"qty": 2.0,
-					},
-				],
-			}
-		]
-		self.make_records(["new_item_code"], records)
 
 	def make_test_account(self):
 		records = [
@@ -2021,49 +1554,42 @@ class BootStrapTestData:
 				"customer_name": "_Test Customer With Template",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 			{
 				"customer_group": "_Test Customer Group",
 				"customer_name": "_Test Customer P",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 			{
 				"customer_group": "_Test Customer Group",
 				"customer_name": "_Test Customer",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 			{
 				"customer_group": "_Test Customer Group",
 				"customer_name": "_Test Customer 1",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 			{
 				"customer_group": "_Test Customer Group",
 				"customer_name": "_Test Customer 2",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 			{
 				"customer_group": "_Test Customer Group",
 				"customer_name": "_Test Customer 3",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 			{
 				"customer_group": "_Test Customer Group",
 				"customer_name": "_Test Customer USD",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 				"default_currency": "USD",
 				"accounts": [{"company": "_Test Company", "account": "_Test Receivable USD - _TC"}],
 			},
@@ -2072,15 +1598,12 @@ class BootStrapTestData:
 				"customer_name": "_Test Customer With Tax Category",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
-				"tax_category": "_Test Tax Category 1",
 			},
 			{
 				"customer_group": "_Test Customer Group",
 				"customer_name": "Test Loyalty Customer",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 			{
 				"customer_group": "_Test Customer Group",
@@ -2088,7 +1611,6 @@ class BootStrapTestData:
 				"customer_type": "Individual",
 				"doctype": "Customer",
 				"is_internal_customer": 1,
-				"territory": "_Test Territory",
 				"represents_company": "_Test Company with perpetual inventory",
 				"companies": [{"company": "_Test Company with perpetual inventory"}],
 			},
@@ -2097,30 +1619,15 @@ class BootStrapTestData:
 				"customer_name": "Prestiga-Biz",
 				"customer_type": "Company",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 			{
 				"customer_group": "_Test Customer Group",
 				"customer_name": "_Test NC",
 				"customer_type": "Individual",
 				"doctype": "Customer",
-				"territory": "_Test Territory",
 			},
 		]
 		self.make_records(["customer_name"], records)
-
-	def make_shareholder(self):
-		records = [
-			{
-				"doctype": "Shareholder",
-				"naming_series": "SH-",
-				"title": "Iron Man",
-				"company": "_Test Company",
-			},
-			{"doctype": "Shareholder", "naming_series": "SH-", "title": "Thor", "company": "_Test Company"},
-			{"doctype": "Shareholder", "naming_series": "SH-", "title": "Hulk", "company": "_Test Company"},
-		]
-		self.make_records(["title", "company"], records)
 
 	def make_sales_taxes_template(self):
 		records = [
@@ -2361,125 +1868,6 @@ class BootStrapTestData:
 		]
 		self.make_records(["title", "company"], records)
 
-	def make_asset_category(self):
-		records = [
-			{
-				"doctype": "Asset Category",
-				"asset_category_name": "Equipment",
-				"total_number_of_depreciations": 3,
-				"frequency_of_depreciation": 3,
-				"accounts": [
-					{
-						"company_name": "_Test Company",
-						"fixed_asset_account": "_Test Fixed Asset - _TC",
-						"accumulated_depreciation_account": "_Test Accumulated Depreciations - _TC",
-						"depreciation_expense_account": "_Test Depreciations - _TC",
-					}
-				],
-			},
-			{
-				"doctype": "Asset Category",
-				"asset_category_name": "Computers",
-				"total_number_of_depreciations": 3,
-				"frequency_of_depreciation": 3,
-				"enable_cwip_accounting": True,
-				"accounts": [
-					{
-						"company_name": "_Test Company",
-						"fixed_asset_account": "_Test Fixed Asset - _TC",
-						"accumulated_depreciation_account": "_Test Accumulated Depreciations - _TC",
-						"depreciation_expense_account": "_Test Depreciations - _TC",
-						"capital_work_in_progress_account": "CWIP Account - _TC",
-					},
-					{
-						"company_name": "_Test Company with perpetual inventory",
-						"fixed_asset_account": "_Test Fixed Asset - TCP1",
-						"accumulated_depreciation_account": "_Test Accumulated Depreciations - TCP1",
-						"depreciation_expense_account": "_Test Depreciations - TCP1",
-					},
-				],
-			},
-		]
-		self.make_records(["asset_category_name"], records)
-
-	def make_asset_maintenance_team(self):
-		records = [
-			{
-				"doctype": "Asset Maintenance Team",
-				"maintenance_manager": "marcus@abc.com",
-				"maintenance_team_name": "Team Awesome",
-				"company": "_Test Company",
-				"maintenance_team_members": [
-					{
-						"team_member": "marcus@abc.com",
-						"full_name": "marcus@abc.com",
-						"maintenance_role": "Technician",
-					},
-					{
-						"team_member": "thalia@abc.com",
-						"full_name": "thalia@abc.com",
-						"maintenance_role": "Technician",
-					},
-					{
-						"team_member": "mathias@abc.com",
-						"full_name": "mathias@abc.com",
-						"maintenance_role": "Technician",
-					},
-				],
-			}
-		]
-		self.make_records(["maintenance_team_name"], records)
-
-	def make_activity_type(self):
-		records = [
-			{
-				"doctype": "Activity Type",
-				"name": "_Test Activity Type",
-				"activity_type": "_Test Activity Type",
-			},
-			{
-				"doctype": "Activity Type",
-				"name": "_Test Activity Type 1",
-				"activity_type": "_Test Activity Type 1",
-			},
-		]
-		self.make_records(["activity_type"], records)
-
-	def make_loyalty_program(self):
-		records = [
-			{
-				"doctype": "Loyalty Program",
-				"loyalty_program_name": "Test Single Loyalty",
-				"auto_opt_in": 1,
-				"from_date": today(),
-				"loyalty_program_type": "Single Tier Program",
-				"conversion_factor": 1,
-				"expiry_duration": 10,
-				"company": "_Test Company",
-				"cost_center": "Main - _TC",
-				"expense_account": "Loyalty - _TC",
-				"collection_rules": [{"tier_name": "Bronce", "collection_factor": 1000, "min_spent": 0}],
-			},
-			{
-				"doctype": "Loyalty Program",
-				"loyalty_program_name": "Test Multiple Loyalty",
-				"auto_opt_in": 1,
-				"from_date": today(),
-				"loyalty_program_type": "Multiple Tier Program",
-				"conversion_factor": 1,
-				"expiry_duration": 10,
-				"company": "_Test Company",
-				"cost_center": "Main - _TC",
-				"expense_account": "Loyalty - _TC",
-				"collection_rules": [
-					{"tier_name": "Bronze", "collection_factor": 1000, "min_spent": 0},
-					{"tier_name": "Silver", "collection_factor": 1000, "min_spent": 10000},
-					{"tier_name": "Gold", "collection_factor": 1000, "min_spent": 19000},
-				],
-			},
-		]
-		self.make_records(["loyalty_program_name"], records)
-
 	def make_item_price(self):
 		records = [
 			{
@@ -2550,285 +1938,6 @@ class BootStrapTestData:
 			},
 		]
 		self.make_records(["item_code", "price_list", "price_list_rate"], records)
-
-	def make_operation(self):
-		records = [
-			{"doctype": "Operation", "name": "_Test Operation 1", "workstation": "_Test Workstation 1"}
-		]
-		self.make_records(["name"], records)
-
-	def make_workstation(self):
-		records = [
-			{
-				"doctype": "Workstation",
-				"name": "_Test Workstation 1",
-				"workstation_name": "_Test Workstation 1",
-				"warehouse": "_Test warehouse - _TC",
-				"hour_rate_labour": 25,
-				"hour_rate_electricity": 25,
-				"hour_rate_consumable": 25,
-				"hour_rate_rent": 25,
-				"holiday_list": "_Test Holiday List",
-				"working_hours": [{"start_time": "10:00:00", "end_time": "20:00:00"}],
-			}
-		]
-		self.make_records(["workstation_name"], records)
-
-	def make_bom(self):
-		# TODO: replace JSON source with hardcoded data
-		records = load_test_records_for("BOM")["BOM"]
-		self.make_records(["item", "company"], records)
-
-	def make_quality_inspection_param(self):
-		records = [{"doctype": "Quality Inspection Parameter", "parameter": "_Test Param"}]
-		self.make_records(["parameter"], records)
-
-	def make_quality_inspection_template(self):
-		records = [
-			{
-				"quality_inspection_template_name": "_Test Quality Inspection Template",
-				"doctype": "Quality Inspection Template",
-				"item_quality_inspection_parameter": [
-					{
-						"specification": "_Test Param",
-						"doctype": "Item Quality Inspection Parameter",
-						"parentfield": "item_quality_inspection_parameter",
-					}
-				],
-			}
-		]
-		self.make_records(["quality_inspection_template_name"], records)
-
-	def make_brand(self):
-		records = [
-			{"brand": "_Test Brand", "doctype": "Brand"},
-			{
-				"brand": "_Test Brand With Item Defaults",
-				"doctype": "Brand",
-				"brand_defaults": [
-					{
-						"company": "_Test Company",
-						"expense_account": "_Test Account Cost for Goods Sold - _TC",
-						"income_account": "_Test Account Sales - _TC",
-						"buying_cost_center": "_Test Cost Center - _TC",
-						"selling_cost_center": "_Test Cost Center - _TC",
-					}
-				],
-			},
-		]
-		self.make_records(["brand"], records)
-
-	def make_dunning_type(self):
-		records = [
-			{
-				"doctype": "Dunning Type",
-				"dunning_type": "First Notice",
-				"company": "_Test Company",
-				"is_default": 1,
-				"dunning_fee": 0,
-				"rate_of_interest": 0,
-				"income_account": "Sales - _TC",
-				"cost_center": "Main - _TC",
-				"dunning_letter_text": [
-					{
-						"language": "en",
-						"body_text": "We have still not received payment for our invoice",
-						"closing_text": "We kindly request that you pay the outstanding amount immediately, including interest and late fees.",
-					},
-				],
-			},
-			{
-				"doctype": "Dunning Type",
-				"dunning_type": "Second Notice",
-				"company": "_Test Company",
-				"is_default": 0,
-				"dunning_fee": 10,
-				"rate_of_interest": 10,
-				"income_account": "Sales - _TC",
-				"cost_center": "Main - _TC",
-				"dunning_letter_text": [
-					{
-						"language": "en",
-						"body_text": "We have still not received payment for our invoice",
-						"closing_text": "We kindly request that you pay the outstanding amount immediately, including interest and late fees.",
-					},
-				],
-			},
-		]
-		self.make_records(["dunning_type"], records)
-
-	def make_finance_book(self):
-		records = [
-			{
-				"doctype": "Finance Book",
-				"finance_book_name": "Test Finance Book 1",
-			},
-			{
-				"doctype": "Finance Book",
-				"finance_book_name": "Test Finance Book 2",
-			},
-			{
-				"doctype": "Finance Book",
-				"finance_book_name": "Test Finance Book 3",
-			},
-		]
-		self.make_records(["finance_book_name"], records)
-
-	def make_custom_doctype(self):
-		if not frappe.db.exists("DocType", "Shelf"):
-			frappe.get_doc(
-				{
-					"doctype": "DocType",
-					"name": "Shelf",
-					"module": "Stock",
-					"custom": 1,
-					"naming_rule": "By fieldname",
-					"autoname": "field:shelf_name",
-					"fields": [{"label": "Shelf Name", "fieldname": "shelf_name", "fieldtype": "Data"}],
-					"permissions": [
-						{
-							"role": "System Manager",
-							"permlevel": 0,
-							"read": 1,
-							"write": 1,
-							"create": 1,
-							"delete": 1,
-						}
-					],
-				}
-			).insert(ignore_permissions=True)
-
-		if not frappe.db.exists("DocType", "Rack"):
-			frappe.get_doc(
-				{
-					"doctype": "DocType",
-					"name": "Rack",
-					"module": "Stock",
-					"custom": 1,
-					"naming_rule": "By fieldname",
-					"autoname": "field:rack_name",
-					"fields": [{"label": "Rack Name", "fieldname": "rack_name", "fieldtype": "Data"}],
-					"permissions": [
-						{
-							"role": "System Manager",
-							"permlevel": 0,
-							"read": 1,
-							"write": 1,
-							"create": 1,
-							"delete": 1,
-						}
-					],
-				}
-			).insert(ignore_permissions=True)
-
-		if not frappe.db.exists("DocType", "Pallet"):
-			frappe.get_doc(
-				{
-					"doctype": "DocType",
-					"name": "Pallet",
-					"module": "Stock",
-					"custom": 1,
-					"naming_rule": "By fieldname",
-					"autoname": "field:pallet_name",
-					"fields": [{"label": "Pallet Name", "fieldname": "pallet_name", "fieldtype": "Data"}],
-					"permissions": [
-						{
-							"role": "System Manager",
-							"permlevel": 0,
-							"read": 1,
-							"write": 1,
-							"create": 1,
-							"delete": 1,
-						}
-					],
-				}
-			).insert(ignore_permissions=True)
-
-		if not frappe.db.exists("DocType", "Inv Site"):
-			frappe.get_doc(
-				{
-					"doctype": "DocType",
-					"name": "Inv Site",
-					"module": "Stock",
-					"custom": 1,
-					"naming_rule": "By fieldname",
-					"autoname": "field:site_name",
-					"fields": [{"label": "Site Name", "fieldname": "site_name", "fieldtype": "Data"}],
-					"permissions": [
-						{
-							"role": "System Manager",
-							"permlevel": 0,
-							"read": 1,
-							"write": 1,
-							"create": 1,
-							"delete": 1,
-						}
-					],
-				}
-			).insert(ignore_permissions=True)
-
-			if not frappe.db.exists("DocType", "Store"):
-				frappe.get_doc(
-					{
-						"doctype": "DocType",
-						"name": "Store",
-						"module": "Stock",
-						"custom": 1,
-						"naming_rule": "By fieldname",
-						"autoname": "field:store_name",
-						"fields": [{"label": "Store Name", "fieldname": "store_name", "fieldtype": "Data"}],
-						"permissions": [
-							{
-								"role": "System Manager",
-								"permlevel": 0,
-								"read": 1,
-								"write": 1,
-								"create": 1,
-								"delete": 1,
-							}
-						],
-					}
-				).insert(ignore_permissions=True)
-
-			if not frappe.db.exists("DocType", "Order Assignment"):
-				frappe.get_doc(
-					{
-						"doctype": "DocType",
-						"name": "Order Assignment",
-						"module": "Buying",
-						"custom": 1,
-						"autoname": "field:po",
-						"fields": [
-							{
-								"label": "PO",
-								"fieldname": "po",
-								"fieldtype": "Link",
-								"options": "Purchase Order",
-							},
-							{
-								"label": "Supplier",
-								"fieldname": "supplier",
-								"fieldtype": "Data",
-								"fetch_from": "po.supplier",
-							},
-						],
-						"permissions": [
-							{
-								"create": 1,
-								"delete": 1,
-								"email": 1,
-								"export": 1,
-								"print": 1,
-								"read": 1,
-								"report": 1,
-								"role": "System Manager",
-								"share": 1,
-								"write": 1,
-							},
-							{"read": 1, "role": "Supplier"},
-						],
-					}
-				).insert(ignore_if_duplicate=True)
 
 	def make_address(self):
 		records = [
@@ -2910,37 +2019,6 @@ class BootStrapTestData:
 		]
 		self.make_records(["first_name"], records)
 
-	def make_dimensions(self):
-		records = [
-			{
-				"doctype": "Accounting Dimension",
-				"document_type": "Department",
-				"dimension_defaults": [
-					{
-						"company": "_Test Company",
-						"reference_document": "Department",
-						"default_dimension": "_Test Department - _TC",
-					}
-				],
-			},
-			{
-				"doctype": "Accounting Dimension",
-				"document_type": "Location",
-				"dimension_defaults": [
-					{
-						"company": "_Test Company",
-						"reference_document": "Location",
-						"default_dimension": "Block 1",
-					}
-				],
-			},
-			{
-				"doctype": "Accounting Dimension",
-				"document_type": "Branch",
-			},
-		]
-		self.make_records(["document_type"], records)
-
 	def make_custom_field(self):
 		pan_field = {
 			"Supplier": [
@@ -2954,58 +2032,6 @@ class BootStrapTestData:
 		}
 
 		create_custom_fields(pan_field, update=1)
-
-	def make_shelf(self):
-		records = [
-			{
-				"doctype": "Shelf",
-				"shelf_name": "Shelf 1",
-			},
-			{
-				"doctype": "Shelf",
-				"shelf_name": "Shelf 2",
-			},
-		]
-		self.make_records(["shelf_name"], records)
-
-	def make_rack(self):
-		records = [
-			{
-				"doctype": "Rack",
-				"rack_name": "Rack 1",
-			},
-			{
-				"doctype": "Rack",
-				"rack_name": "Rack 2",
-			},
-		]
-		self.make_records(["rack_name"], records)
-
-	def make_inv_site(self):
-		records = [
-			{
-				"doctype": "Inv Site",
-				"site_name": "Site 1",
-			},
-			{
-				"doctype": "Inv Site",
-				"site_name": "Site 2",
-			},
-		]
-		self.make_records(["site_name"], records)
-
-	def make_store(self):
-		records = [
-			{
-				"doctype": "Store",
-				"store_name": "Store 1",
-			},
-			{
-				"doctype": "Store",
-				"store_name": "Store 2",
-			},
-		]
-		self.make_records(["store_name"], records)
 
 
 BootStrapTestData()

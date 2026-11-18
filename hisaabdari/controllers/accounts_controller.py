@@ -27,6 +27,7 @@ from frappe.utils import (
 	get_last_day,
 	get_link_to_form,
 	getdate,
+	parse_json,
 	today,
 )
 
@@ -64,10 +65,13 @@ from hisaabdari.exceptions import InvalidCurrency
 from hisaabdari.setup.utils import get_exchange_rate
 from hisaabdari.stock.doctype.item.item import get_uom_conv_factor
 from hisaabdari.stock.get_item_details import (
+	NOT_APPLICABLE_TAX,
 	ItemDetailsCtx,
 	_get_bin_details,
 	_get_item_details,
 	_get_item_tax_map,
+	_get_item_tax_template,
+	_get_item_tax_template_from_item_group,
 	get_conversion_factor,
 	get_item_warehouse_,
 )
@@ -233,6 +237,10 @@ class AccountsController(TransactionBase):
 				)
 
 			if msg:
+				msg += "<br><br>" + _("You can use {0} to reconcile against {1} later.").format(
+					get_link_to_form("Payment Reconciliation"),
+					get_link_to_form(self.doctype, self.get("return_against")),
+				)
 				frappe.msgprint(msg)
 
 	def is_negative_grand_total_allowed(self) -> bool:
@@ -1225,11 +1233,48 @@ class AccountsController(TransactionBase):
 			if tax_master_doctype := self.meta.get_field("taxes_and_charges").options:
 				self.append_taxes_from_master(tax_master_doctype)
 
+		if frappe.get_single_value("Accounts Settings", "add_taxes_from_item_tax_template"):
+			self.append_taxes_from_item_tax_template()
+
 	def append_taxes_from_master(self, tax_master_doctype=None):
 		if self.get("taxes_and_charges"):
 			if not tax_master_doctype:
 				tax_master_doctype = self.meta.get_field("taxes_and_charges").options
 			self.extend("taxes", _get_taxes_and_charges(tax_master_doctype, self.get("taxes_and_charges")))
+
+	def append_taxes_from_item_tax_template(self):
+		if not frappe.get_single_value("Accounts Settings", "add_taxes_from_item_tax_template"):
+			return
+
+		for row in self.items:
+			item_tax_rate = row.get("item_tax_rate")
+			if not item_tax_rate:
+				continue
+
+			if isinstance(item_tax_rate, str):
+				item_tax_rate = parse_json(item_tax_rate)
+
+			for account_head, _rate in item_tax_rate.items():
+				row = self.get_tax_row(account_head)
+
+				if not row:
+					self.append(
+						"taxes",
+						{
+							"charge_type": "On Net Total",
+							"account_head": account_head,
+							"rate": 0,
+							"description": account_head,
+							"set_by_item_tax_template": 1,
+							"category": "Total",
+							"add_deduct_tax": "Add",
+						},
+					)
+
+	def get_tax_row(self, account_head):
+		for row in self.taxes:
+			if row.account_head == account_head:
+				return row
 
 	def set_other_charges(self):
 		self.set("taxes", [])
@@ -3748,11 +3793,58 @@ def get_supplier_block_status(party_name):
 
 
 def set_child_tax_template_and_map(item, child_item, parent_doc):
+	ctx = ItemDetailsCtx(
+		{
+			"item_code": item.item_code,
+			"posting_date": parent_doc.transaction_date,
+			"company": parent_doc.get("company"),
+			"base_net_rate": item.get("base_net_rate"),
+		}
+	)
+
+	item_tax_template = _get_item_tax_template(ctx, item.taxes)
+
+	if not item_tax_template:
+		item_tax_template = _get_item_tax_template_from_item_group(ctx, item.item_group)
+
+	child_item.item_tax_template = item_tax_template
 	child_item.item_tax_rate = _get_item_tax_map(
 		doc=parent_doc,
-		tax_template=None,
+		tax_template=child_item.item_tax_template,
 		as_json=True,
 	)
+
+
+def add_taxes_from_tax_template(child_item, parent_doc, db_insert=True):
+	add_taxes_from_item_tax_template = frappe.get_single_value(
+		"Accounts Settings", "add_taxes_from_item_tax_template"
+	)
+
+	if child_item.get("item_tax_rate") and add_taxes_from_item_tax_template:
+		tax_map = json.loads(child_item.get("item_tax_rate"))
+		for tax_type, tax_rate in tax_map.items():
+			if tax_rate == NOT_APPLICABLE_TAX:
+				continue
+
+			tax_rate = flt(tax_rate)
+			taxes = parent_doc.get("taxes") or []
+			# add new row for tax head only if missing
+			found = any(tax.account_head == tax_type for tax in taxes)
+			if not found:
+				tax_row = parent_doc.append("taxes", {})
+				tax_row.update(
+					{
+						"description": str(tax_type).split(" - ")[0],
+						"charge_type": "On Net Total",
+						"account_head": tax_type,
+						"rate": tax_rate,
+						"set_by_item_tax_template": 1,
+					}
+				)
+				if parent_doc.doctype == "Purchase Order":
+					tax_row.update({"category": "Total", "add_deduct_tax": "Add"})
+				if db_insert:
+					tax_row.db_insert()
 
 
 def set_order_defaults(parent_doctype, parent_doctype_name, child_doctype, child_docname, trans_item):
@@ -3782,6 +3874,7 @@ def set_order_defaults(parent_doctype, parent_doctype_name, child_doctype, child
 		child_item.base_amount = 1
 
 	set_child_tax_template_and_map(item, child_item, p_doc)
+	add_taxes_from_tax_template(child_item, p_doc)
 	return child_item
 
 
