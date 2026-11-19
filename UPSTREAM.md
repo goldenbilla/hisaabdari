@@ -65,5 +65,7 @@ Kinds of difference, in the order they were applied:
     moved between sections and a few labels are shortened. No field is renamed or removed
     by this step, so a layout difference against upstream is expected in every such JSON.
 
+To move an existing ERPNext version-16 site onto HisaabDari, see `tools/site_conversion/README.md`.
+
 To pick up an upstream fix: diff the baseline commit against the newer upstream commit for
 the files that still exist here, and port the relevant hunks by hand.
