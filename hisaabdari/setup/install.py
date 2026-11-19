@@ -329,6 +329,7 @@ def toggle_hidden_fields():
 		toggle_utm_analytics_section,
 	)
 
+	frappe.db.set_single_value("Accounts Settings", "enable_discounts_and_margin", 1)
 	acc_settings = frappe.get_doc("Accounts Settings")
 	toggle_accounting_dimension_sections(not acc_settings.enable_accounting_dimensions)
 	toggle_sales_discount_section(not acc_settings.enable_discounts_and_margin)

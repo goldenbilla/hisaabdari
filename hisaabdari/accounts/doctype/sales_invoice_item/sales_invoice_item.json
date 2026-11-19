@@ -64,6 +64,7 @@
   "income_account",
   "col_break4",
   "expense_account",
+  "cost_center",
   "discount_account",
   "column_break_50",
   "section_break_18",
@@ -103,7 +104,6 @@
   "column_break_92",
   "purchase_order_item",
   "accounting_dimensions_section",
-  "cost_center",
   "dimension_col_break",
   "section_break_54",
   "page_break"
@@ -114,6 +114,14 @@
    "fieldtype": "Data",
    "label": "Barcode",
    "print_hide": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "barcode",
+   "fieldname": "has_item_scanned",
+   "fieldtype": "Check",
+   "label": "Has Item Scanned",
+   "read_only": 1
   },
   {
    "bold": 1,
@@ -150,6 +158,12 @@
    "read_only": 1
   },
   {
+   "collapsible": 1,
+   "fieldname": "description_section",
+   "fieldtype": "Section Break",
+   "label": "Description"
+  },
+  {
    "fieldname": "description",
    "fieldtype": "Text Editor",
    "label": "Description",
@@ -159,11 +173,30 @@
    "width": "200px"
   },
   {
-   "fieldname": "image_view",
-   "fieldtype": "Image",
-   "label": "Image View",
-   "options": "image",
+   "fieldname": "item_group",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Item Group",
+   "oldfieldname": "item_group",
+   "oldfieldtype": "Link",
+   "options": "Item Group",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "brand",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Brand Name",
+   "oldfieldname": "brand",
+   "oldfieldtype": "Data",
    "print_hide": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "image_section",
+   "fieldtype": "Section Break",
+   "label": "Image"
   },
   {
    "fetch_from": "item_code.image",
@@ -171,6 +204,13 @@
    "fieldtype": "Attach",
    "hidden": 1,
    "label": "Image"
+  },
+  {
+   "fieldname": "image_view",
+   "fieldtype": "Image",
+   "label": "Image View",
+   "options": "image",
+   "print_hide": 1
   },
   {
    "fieldname": "quantity_and_rate",
@@ -254,12 +294,13 @@
    "collapsible_depends_on": "eval: doc.margin_type || doc.discount_amount || doc.distributed_discount_amount",
    "fieldname": "discount_and_margin",
    "fieldtype": "Section Break",
-   "label": "Discount and Margin"
+   "label": "Discount"
   },
   {
    "depends_on": "price_list_rate",
    "fieldname": "margin_type",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Margin Type",
    "options": "\nPercentage\nAmount",
    "print_hide": 1
@@ -268,6 +309,7 @@
    "depends_on": "eval:doc.margin_type && doc.price_list_rate",
    "fieldname": "margin_rate_or_amount",
    "fieldtype": "Float",
+   "hidden": 1,
    "label": "Margin Rate or Amount",
    "print_hide": 1
   },
@@ -275,6 +317,7 @@
    "depends_on": "eval:doc.margin_type && doc.price_list_rate && doc.margin_rate_or_amount",
    "fieldname": "rate_with_margin",
    "fieldtype": "Currency",
+   "hidden": 1,
    "label": "Rate With Margin",
    "options": "currency",
    "print_hide": 1,
@@ -288,7 +331,7 @@
    "depends_on": "price_list_rate",
    "fieldname": "discount_percentage",
    "fieldtype": "Percent",
-   "label": "Discount (%) on Price List Rate with Margin",
+   "label": "Discount (%)",
    "oldfieldname": "adj_rate",
    "oldfieldtype": "Float",
    "print_hide": 1
@@ -302,9 +345,30 @@
    "print_hide": 1
   },
   {
+   "fieldname": "distributed_discount_amount",
+   "fieldtype": "Currency",
+   "label": "Distributed Discount Amount",
+   "options": "currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Tax-exclusive additional discount carried from a source document, per stock unit.",
+   "fieldname": "mapped_additional_discount_amount",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Additional Discount per Stock Unit",
+   "options": "currency",
+   "precision": "9",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:doc.margin_type && doc.price_list_rate && doc.margin_rate_or_amount",
    "fieldname": "base_rate_with_margin",
    "fieldtype": "Currency",
+   "hidden": 1,
    "label": "Rate With Margin (Company Currency)",
    "options": "Company:company:default_currency",
    "print_hide": 1,
@@ -337,6 +401,13 @@
    "options": "currency",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "item_tax_template",
+   "fieldtype": "Link",
+   "label": "Item Tax Template",
+   "options": "Item Tax Template",
+   "print_hide": 1
   },
   {
    "fieldname": "col_break3",
@@ -373,12 +444,32 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval: doc.uom != doc.stock_uom",
+   "fieldname": "stock_uom_rate",
+   "fieldtype": "Currency",
+   "label": "Rate of Stock UOM",
+   "no_copy": 1,
+   "options": "currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "default": "0",
    "fieldname": "is_free_item",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Is Free Item",
    "print_hide": 1,
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:parent.update_stock",
+   "fieldname": "allow_zero_valuation_rate",
+   "fieldtype": "Check",
+   "label": "Allow Zero Valuation Rate",
+   "no_copy": 1,
+   "print_hide": 1
   },
   {
    "fieldname": "section_break_21",
@@ -425,6 +516,7 @@
    "collapsible_depends_on": "eval:doc.delivered_by_supplier==1",
    "fieldname": "drop_ship",
    "fieldtype": "Section Break",
+   "hidden": 1,
    "label": "Drop Ship"
   },
   {
@@ -455,6 +547,10 @@
    "width": "120px"
   },
   {
+   "fieldname": "col_break4",
+   "fieldtype": "Column Break"
+  },
+  {
    "allow_on_submit": 1,
    "fieldname": "expense_account",
    "fieldtype": "Link",
@@ -462,17 +558,6 @@
    "options": "Account",
    "print_hide": 1,
    "width": "120px"
-  },
-  {
-   "fieldname": "col_break4",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "item_tax_template",
-   "fieldtype": "Link",
-   "label": "Item Tax Template",
-   "options": "Item Tax Template",
-   "print_hide": 1
   },
   {
    "allow_on_submit": 1,
@@ -487,6 +572,13 @@
    "print_width": "120px",
    "reqd": 1,
    "width": "120px"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "discount_account",
+   "fieldtype": "Link",
+   "label": "Discount Account",
+   "options": "Account"
   },
   {
    "fieldname": "column_break_50",
@@ -554,51 +646,40 @@
    "print_hide": 1
   },
   {
-   "fieldname": "batch_no",
+   "depends_on": "eval:doc.use_serial_batch_fields === 0 && doc.docstatus === 0",
+   "fieldname": "pick_serial_and_batch",
+   "fieldtype": "Button",
+   "label": "Pick Serial / Batch No"
+  },
+  {
+   "depends_on": "eval:doc.use_serial_batch_fields === 0 || doc.docstatus === 1",
+   "fieldname": "serial_and_batch_bundle",
    "fieldtype": "Link",
-   "label": "Batch No",
-   "options": "Batch",
+   "label": "Serial and Batch Bundle",
+   "no_copy": 1,
+   "options": "Serial and Batch Bundle",
+   "print_hide": 1,
    "search_index": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "use_serial_batch_fields",
+   "fieldtype": "Check",
+   "label": "Use Serial No / Batch Fields",
+   "print_hide": 1
   },
   {
    "fieldname": "col_break5",
    "fieldtype": "Column Break"
   },
   {
-   "default": "0",
-   "depends_on": "eval:parent.update_stock",
-   "fieldname": "allow_zero_valuation_rate",
-   "fieldtype": "Check",
-   "label": "Allow Zero Valuation Rate",
+   "depends_on": "eval:parent.is_return && parent.update_stock && !parent.return_against",
+   "fieldname": "incoming_rate",
+   "fieldtype": "Currency",
+   "label": "Incoming Rate (Costing)",
    "no_copy": 1,
-   "print_hide": 1
-  },
-  {
-   "fieldname": "serial_no",
-   "fieldtype": "Text",
-   "label": "Serial No",
-   "no_copy": 1,
-   "oldfieldname": "serial_no",
-   "oldfieldtype": "Small Text"
-  },
-  {
-   "fieldname": "item_group",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Item Group",
-   "oldfieldname": "item_group",
-   "oldfieldtype": "Link",
-   "options": "Item Group",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "brand",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Brand Name",
-   "oldfieldname": "brand",
-   "oldfieldtype": "Data",
+   "non_negative": 1,
+   "options": "Company:company:default_currency",
    "print_hide": 1
   },
   {
@@ -623,6 +704,35 @@
    "width": "150px"
   },
   {
+   "depends_on": "eval:doc.use_serial_batch_fields === 1 && parent.update_stock === 1",
+   "fieldname": "section_break_eoec",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Text",
+   "label": "Serial No",
+   "no_copy": 1,
+   "oldfieldname": "serial_no",
+   "oldfieldtype": "Small Text"
+  },
+  {
+   "fieldname": "column_break_ytgd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch No",
+   "options": "Batch",
+   "search_index": 1
+  },
+  {
+   "fieldname": "available_quantity_section",
+   "fieldtype": "Section Break",
+   "label": "Available Quantity"
+  },
+  {
    "allow_on_submit": 1,
    "fieldname": "actual_qty",
    "fieldtype": "Float",
@@ -630,6 +740,19 @@
    "no_copy": 1,
    "oldfieldname": "actual_qty",
    "oldfieldtype": "Currency",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ogff",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "company_total_stock",
+   "fieldtype": "Float",
+   "label": "Qty (Company)",
+   "no_copy": 1,
    "print_hide": 1,
    "read_only": 1
   },
@@ -662,6 +785,16 @@
    "print_hide": 1,
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "depends_on": "eval:parent.update_stock == 1",
+   "fieldname": "sales_invoice_item",
+   "fieldtype": "Data",
+   "ignore_user_permissions": 1,
+   "label": "Sales Invoice Item",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
   },
   {
    "fieldname": "column_break_74",
@@ -701,77 +834,8 @@
    "read_only": 1
   },
   {
-   "fieldname": "section_break_54",
-   "fieldtype": "Section Break"
-  },
-  {
-   "allow_on_submit": 1,
-   "default": "0",
-   "fieldname": "page_break",
-   "fieldtype": "Check",
-   "label": "Page Break",
-   "no_copy": 1,
-   "print_hide": 1,
-   "report_hide": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "description_section",
-   "fieldtype": "Section Break",
-   "label": "Description"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "image_section",
-   "fieldtype": "Section Break",
-   "label": "Image"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "accounting_dimensions_section",
-   "fieldtype": "Section Break",
-   "label": "Accounting Dimensions"
-  },
-  {
-   "fieldname": "dimension_col_break",
+   "fieldname": "column_break_vwhb",
    "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:parent.update_stock == 1",
-   "fieldname": "sales_invoice_item",
-   "fieldtype": "Data",
-   "ignore_user_permissions": 1,
-   "label": "Sales Invoice Item",
-   "no_copy": 1,
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:parent.is_return && parent.update_stock && !parent.return_against",
-   "fieldname": "incoming_rate",
-   "fieldtype": "Currency",
-   "label": "Incoming Rate (Costing)",
-   "no_copy": 1,
-   "non_negative": 1,
-   "options": "Company:company:default_currency",
-   "print_hide": 1
-  },
-  {
-   "depends_on": "eval: doc.uom != doc.stock_uom",
-   "fieldname": "stock_uom_rate",
-   "fieldtype": "Currency",
-   "label": "Rate of Stock UOM",
-   "no_copy": 1,
-   "options": "currency",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "allow_on_submit": 1,
-   "fieldname": "discount_account",
-   "fieldtype": "Link",
-   "label": "Discount Account",
-   "options": "Account"
   },
   {
    "collapsible": 1,
@@ -801,85 +865,30 @@
    "read_only": 1
   },
   {
-   "default": "0",
-   "depends_on": "barcode",
-   "fieldname": "has_item_scanned",
-   "fieldtype": "Check",
-   "label": "Has Item Scanned",
-   "read_only": 1
+   "collapsible": 1,
+   "fieldname": "accounting_dimensions_section",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "Accounting Dimensions"
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 0 || doc.docstatus === 1",
-   "fieldname": "serial_and_batch_bundle",
-   "fieldtype": "Link",
-   "label": "Serial and Batch Bundle",
-   "no_copy": 1,
-   "options": "Serial and Batch Bundle",
-   "print_hide": 1,
-   "search_index": 1
+   "fieldname": "dimension_col_break",
+   "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:doc.use_serial_batch_fields === 0 && doc.docstatus === 0",
-   "fieldname": "pick_serial_and_batch",
-   "fieldtype": "Button",
-   "label": "Pick Serial / Batch No"
-  },
-  {
-   "default": "0",
-   "fieldname": "use_serial_batch_fields",
-   "fieldtype": "Check",
-   "label": "Use Serial No / Batch Fields",
-   "print_hide": 1
-  },
-  {
-   "depends_on": "eval:doc.use_serial_batch_fields === 1 && parent.update_stock === 1",
-   "fieldname": "section_break_eoec",
+   "fieldname": "section_break_54",
    "fieldtype": "Section Break"
   },
   {
-   "fieldname": "column_break_ytgd",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "distributed_discount_amount",
-   "fieldtype": "Currency",
-   "label": "Distributed Discount Amount",
-   "options": "currency",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "description": "Tax-exclusive additional discount carried from a source document, per stock unit.",
-   "fieldname": "mapped_additional_discount_amount",
-   "fieldtype": "Currency",
-   "label": "Additional Discount per Stock Unit",
-   "options": "currency",
-   "precision": "9",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "available_quantity_section",
-   "fieldtype": "Section Break",
-   "label": "Available Quantity"
-  },
-  {
-   "fieldname": "column_break_ogff",
-   "fieldtype": "Column Break"
-  },
-  {
    "allow_on_submit": 1,
-   "fieldname": "company_total_stock",
-   "fieldtype": "Float",
-   "label": "Qty (Company)",
+   "default": "0",
+   "fieldname": "page_break",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Page Break",
    "no_copy": 1,
    "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_vwhb",
-   "fieldtype": "Column Break"
+   "report_hide": 1
   }
  ],
  "grid_page_length": 50,

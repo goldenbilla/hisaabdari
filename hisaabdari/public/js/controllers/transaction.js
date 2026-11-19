@@ -325,6 +325,10 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 		if (this.frm.doc.__islocal) {
 			var currency = frappe.defaults.get_user_default("currency");
 
+			if (frappe.meta.has_field(this.frm.doc.doctype, "set_posting_time")) {
+				this.frm.doc.set_posting_time = 1;
+			}
+
 			let set_value = (fieldname, value) => {
 				if (me.frm.fields_dict[fieldname] && !me.frm.doc[fieldname]) {
 					return me.frm.set_value(fieldname, value);
@@ -1648,7 +1652,11 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 		];
 
 		taxes_fields.forEach((field) => {
-			this.frm.toggle_display(field, this.frm.doc[field] !== 0 || this.frm.doc.docstatus !== 1);
+			this.frm.toggle_display(
+				field,
+				(this.frm.doc[field] !== 0 || this.frm.doc.docstatus !== 1) &&
+					(!field.startsWith("base_") || this.frm.doc.currency != company_currency)
+			);
 		});
 
 		let show =
@@ -1730,7 +1738,7 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 			["base_rate", "base_price_list_rate", "base_amount", "base_rate_with_margin"],
 			function (i, fname) {
 				if (frappe.meta.get_docfield(item_grid.doctype, fname))
-					item_grid.set_column_disp(fname, me.frm.doc.currency != company_currency);
+					item_grid.set_column_disp([fname], me.frm.doc.currency != company_currency);
 			}
 		);
 
@@ -1741,12 +1749,12 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 			}).length;
 
 		$.each(["net_rate", "net_amount"], function (i, fname) {
-			if (frappe.meta.get_docfield(item_grid.doctype, fname)) item_grid.set_column_disp(fname, show);
+			if (frappe.meta.get_docfield(item_grid.doctype, fname)) item_grid.set_column_disp([fname], show);
 		});
 
 		$.each(["base_net_rate", "base_net_amount"], function (i, fname) {
 			if (frappe.meta.get_docfield(item_grid.doctype, fname))
-				item_grid.set_column_disp(fname, show && me.frm.doc.currency != company_currency);
+				item_grid.set_column_disp([fname], show && me.frm.doc.currency != company_currency);
 		});
 	}
 
