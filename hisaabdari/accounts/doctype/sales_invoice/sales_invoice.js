@@ -7,6 +7,7 @@ cur_frm.cscript.tax_table = "Sales Taxes and Charges";
 
 hisaabdari.accounts.taxes.setup_tax_validations("Sales Invoice");
 hisaabdari.accounts.payment_triggers.setup("Sales Invoice");
+hisaabdari.accounts.pos.setup("Sales Invoice");
 hisaabdari.accounts.taxes.setup_tax_filters("Sales Taxes and Charges");
 hisaabdari.sales_common.setup_selling_controller();
 hisaabdari.accounts.SalesInvoiceController = class SalesInvoiceController extends (
@@ -38,6 +39,12 @@ hisaabdari.accounts.SalesInvoiceController = class SalesInvoiceController extend
 			return hisaabdari.queries.warehouse(me.frm.doc);
 		});
 
+		if (this.frm.doc.__islocal && this.frm.doc.is_pos) {
+			//Load payment data on the invoice if the default value of Is Paid is 1
+
+			me.frm.script_manager.trigger("is_pos");
+			me.frm.refresh_fields();
+		}
 		hisaabdari.queries.setup_warehouse_query(this.frm);
 	}
 
@@ -200,7 +207,9 @@ hisaabdari.accounts.SalesInvoiceController = class SalesInvoiceController extend
 			this.frm.cscript.quotation_btn();
 		}
 
-		this.frm.cscript.delivery_note_btn();
+		if (cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt)) {
+			this.frm.cscript.delivery_note_btn();
+		}
 	}
 
 	sales_order_btn() {
@@ -360,6 +369,28 @@ hisaabdari.accounts.SalesInvoiceController = class SalesInvoiceController extend
 		this.frm.refresh_fields();
 	}
 
+	write_off_outstanding_amount_automatically() {
+		if (cint(this.frm.doc.write_off_outstanding_amount_automatically)) {
+			frappe.model.round_floats_in(this.frm.doc, ["grand_total", "paid_amount"]);
+			// this will make outstanding amount 0
+			this.frm.set_value(
+				"write_off_amount",
+				flt(
+					this.frm.doc.grand_total - this.frm.doc.paid_amount - this.frm.doc.total_advance,
+					precision("write_off_amount")
+				)
+			);
+		}
+
+		this.calculate_outstanding_amount(false);
+		this.frm.refresh_fields();
+	}
+
+	write_off_amount() {
+		this.set_in_company_currency(this.frm.doc, ["write_off_amount"]);
+		this.write_off_outstanding_amount_automatically();
+	}
+
 	items_add(doc, cdt, cdn) {
 		const row = frappe.get_doc(cdt, cdn);
 		const field_copy = ["income_account", "discount_account", "cost_center"];
@@ -384,6 +415,60 @@ hisaabdari.accounts.SalesInvoiceController = class SalesInvoiceController extend
 			method: "hisaabdari.accounts.doctype.sales_invoice.sales_invoice.make_sales_return",
 			frm: this.frm,
 		});
+	}
+
+	is_pos(frm) {
+		this.set_pos_data();
+	}
+
+	set_pos_data() {
+		if (this.frm.doc.is_pos) {
+			this.frm.set_value("allocate_advances_automatically", 0);
+			if (!this.frm.doc.company) {
+				this.frm.set_value("is_pos", 0);
+				frappe.msgprint(__("Please specify Company to proceed"));
+			} else {
+				var me = this;
+				const for_validate = me.frm.doc.is_return ? true : false;
+				return this.frm.call({
+					doc: me.frm.doc,
+					method: "set_missing_values",
+					args: {
+						for_validate: for_validate,
+					},
+					callback: function (r) {
+						if (!r.exc) {
+							if (r.message) {
+								me.frm.set_default_payment = r.message.set_default_payment;
+							}
+							me.frm.trigger("update_stock");
+							if (me.frm.doc.taxes_and_charges) {
+								me.frm.script_manager.trigger("taxes_and_charges");
+							}
+
+							frappe.model.set_default_values(me.frm.doc);
+							me.set_dynamic_labels();
+							me.calculate_taxes_and_totals();
+						}
+					},
+				});
+			}
+		} else this.frm.trigger("refresh");
+	}
+
+	amount() {
+		this.write_off_outstanding_amount_automatically();
+	}
+
+	change_amount() {
+		if (this.frm.doc.paid_amount > this.frm.doc.grand_total) {
+			this.calculate_write_off_amount();
+		} else {
+			this.frm.set_value("change_amount", 0.0);
+			this.frm.set_value("base_change_amount", 0.0);
+		}
+
+		this.frm.refresh_fields();
 	}
 
 	is_cash_or_non_trade_discount() {
@@ -438,6 +523,46 @@ frappe.ui.form.on("Sales Invoice", {
 
 		frm.set_df_property("packed_items", "cannot_add_rows", true);
 		frm.set_df_property("packed_items", "cannot_delete_rows", true);
+
+		frm.set_query("cash_bank_account", function (doc) {
+			return {
+				filters: [
+					["Account", "account_type", "in", ["Cash", "Bank"]],
+					["Account", "root_type", "=", "Asset"],
+					["Account", "is_group", "=", 0],
+					["Account", "company", "=", doc.company],
+				],
+			};
+		});
+
+		frm.set_query("write_off_account", function (doc) {
+			return {
+				filters: {
+					report_type: "Profit and Loss",
+					is_group: 0,
+					company: doc.company,
+				},
+			};
+		});
+
+		frm.set_query("write_off_cost_center", function (doc) {
+			return {
+				filters: {
+					is_group: 0,
+					company: doc.company,
+				},
+			};
+		});
+
+		frm.set_query("account_for_change_amount", function (doc) {
+			return {
+				filters: {
+					account_type: ["in", ["Cash", "Bank"]],
+					company: doc.company,
+					is_group: 0,
+				},
+			};
+		});
 
 		frm.set_query("cost_center", "items", function (doc) {
 			return {
@@ -535,9 +660,13 @@ frappe.ui.form.on("Sales Invoice", {
 			"to_date",
 		];
 
-		for (var i in parent_fields) {
-			var docfield = frappe.meta.docfield_map[doc.doctype][parent_fields[i]];
-			if (!docfield.hidden) unhide_field(parent_fields[i]);
+		if (cint(doc.is_pos) == 1) {
+			hide_field(parent_fields);
+		} else {
+			for (var i in parent_fields) {
+				var docfield = frappe.meta.docfield_map[doc.doctype][parent_fields[i]];
+				if (!docfield.hidden) unhide_field(parent_fields[i]);
+			}
 		}
 
 		frm.refresh_fields();
@@ -547,5 +676,38 @@ frappe.ui.form.on("Sales Invoice", {
 		if (frm.doc.is_debit_note) {
 			frm.set_df_property("return_against", "label", __("Adjustment Against"));
 		}
+	},
+});
+
+// When Delivery Notes and Purchase Receipts are not used, the invoice itself moves the stock.
+frappe.ui.form.on("Sales Invoice", {
+	refresh: function (frm) {
+		if (cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt)) return;
+
+		frm.toggle_display("update_stock", false);
+		if (frm.is_new() && !cint(frm.doc.update_stock) && frm.doc.is_opening != "Yes") {
+			frm.trigger("is_opening");
+		}
+	},
+
+	is_opening: function (frm) {
+		if (cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt)) return;
+		if (frm.doc.docstatus != 0 || (frm.doc.is_return && frm.doc.return_against)) return;
+		if ((frm.doc.items || []).some((d) => d.delivery_note || d.delivered_by_supplier)) return;
+
+		const update_stock = frm.doc.is_opening == "Yes" ? 0 : 1;
+		if (cint(frm.doc.update_stock) != update_stock) frm.set_value("update_stock", update_stock);
+	},
+});
+
+frappe.ui.form.on("Sales Invoice Payment", {
+	mode_of_payment: function (frm) {
+		frappe.call({
+			doc: frm.doc,
+			method: "set_account_for_mode_of_payment",
+			callback: function (r) {
+				refresh_field("payments");
+			},
+		});
 	},
 });

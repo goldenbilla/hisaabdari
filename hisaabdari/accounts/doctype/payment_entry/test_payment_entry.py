@@ -3108,6 +3108,41 @@ class TestPaymentEntry(ERPNextTestSuite):
 			self.assertEqual(ref.voucher_no, so.name)
 			self.assertIsNotNone(ref.payment_term)
 
+	@ERPNextTestSuite.change_settings("Accounts Settings", {"allow_stale": 0, "stale_days": 1})
+	def test_get_payment_entry_without_exchange_rate(self):
+		# no Currency Exchange record for the day: a clear message instead of a division by zero
+		si = create_sales_invoice(
+			customer="_Test Customer USD",
+			debit_to="_Test Receivable USD - _TC",
+			currency="USD",
+			conversion_rate=50,
+		)
+		frappe.db.delete("Currency Exchange", {"date": (">=", add_days(nowdate(), -1))})
+
+		with self.assertRaisesRegex(
+			frappe.ValidationError,
+			"There is no exchange rate for .*USD.* to .*INR.* on .*Add a Currency Exchange record",
+		):
+			get_payment_entry("Sales Invoice", si.name)
+
+		# with a record for the day the payment is made as before
+		frappe.get_doc(
+			{
+				"doctype": "Currency Exchange",
+				"date": nowdate(),
+				"from_currency": "USD",
+				"to_currency": "INR",
+				"exchange_rate": 80,
+				"for_buying": 1,
+				"for_selling": 1,
+			}
+		).insert()
+		pe = get_payment_entry("Sales Invoice", si.name)
+		self.assertEqual(pe.source_exchange_rate, 80)
+		self.assertEqual(pe.paid_amount, 100)
+		self.assertEqual(pe.received_amount, 8000)
+		self.assertEqual(pe.unallocated_amount, 0)
+
 
 def create_payment_entry(**args):
 	payment_entry = frappe.new_doc("Payment Entry")

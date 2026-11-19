@@ -13,7 +13,20 @@ from frappe.utils.html_utils import clean_html
 
 from hisaabdari.stock.utils import check_pending_reposting
 
-BOOT_FIELDS = ("disable_serial_no_and_batch_selector", "pick_serial_and_batch_based_on")
+BOOT_FIELDS = (
+	"disable_serial_no_and_batch_selector",
+	"pick_serial_and_batch_based_on",
+	"use_delivery_note_and_purchase_receipt",
+)
+
+DELIVERY_AND_RECEIPT_DOCTYPES = ("Delivery Note", "Purchase Receipt")
+DELIVERY_AND_RECEIPT_REPORTS = (
+	"Delivery Note Trends",
+	"Purchase Receipt Trends",
+	"Delivered Items To Be Billed",
+	"Received Items To Be Billed",
+	"Billed Items To Be Received",
+)
 
 
 class StockSettings(Document):
@@ -56,6 +69,7 @@ class StockSettings(Document):
 		stock_uom: DF.Link | None
 		update_existing_price_list_rate: DF.Check
 		update_price_list_based_on: DF.Literal["Rate", "Price List Rate"]
+		use_delivery_note_and_purchase_receipt: DF.Check
 		use_naming_series: DF.Check
 		use_serial_batch_fields: DF.Check
 		validate_material_transfer_warehouses: DF.Check
@@ -95,9 +109,34 @@ class StockSettings(Document):
 		self.change_precision_for_purchase()
 		self.change_precision_for_stock_entry()
 		self.validate_do_not_use_batchwise_valuation()
+		self.validate_use_delivery_note_and_purchase_receipt()
 
 	def on_update(self):
 		self.clear_boot_cache()
+
+	def validate_use_delivery_note_and_purchase_receipt(self):
+		doc_before_save = self.get_doc_before_save()
+		if not doc_before_save:
+			return
+
+		if not cint(doc_before_save.use_delivery_note_and_purchase_receipt) or cint(
+			self.use_delivery_note_and_purchase_receipt
+		):
+			return
+
+		pending = []
+		for doctype in DELIVERY_AND_RECEIPT_DOCTYPES:
+			count = frappe.db.count(doctype, {"docstatus": 1, "status": "To Bill"})
+			if count:
+				pending.append(f"{count} {_(doctype)}")
+
+		if pending:
+			frappe.throw(
+				_(
+					"You cannot turn off {0} yet, because these are submitted but not invoiced: {1}. Make the invoices for them, or cancel them, and then try again."
+				).format(frappe.bold(_("Use Delivery Notes and Purchase Receipts")), ", ".join(pending)),
+				title=_("Delivery Notes or Purchase Receipts Not Invoiced"),
+			)
 
 	def clear_boot_cache(self):
 		"""Boot sends `BOOT_FIELDS` in sysdefaults."""
@@ -105,6 +144,10 @@ class StockSettings(Document):
 			frappe.cache.delete_key("bootinfo")
 			# Requests before commit can cache the old boot again.
 			frappe.db.after_commit.add(lambda: frappe.cache.delete_key("bootinfo"))
+
+		if self.has_value_changed("use_delivery_note_and_purchase_receipt"):
+			# form dashboards are cached with the doctype and list or hide the two doctypes
+			frappe.clear_cache()
 
 	def update_barcode_field_visibility(self):
 		if not self.has_value_changed("show_barcode_field"):
@@ -302,3 +345,33 @@ def get_transaction_barcode_fields():
 				fields.append((table_field.options, "barcode"))
 
 	return fields
+
+
+def use_delivery_note_and_purchase_receipt():
+	return cint(frappe.get_single_value("Stock Settings", "use_delivery_note_and_purchase_receipt"))
+
+
+def set_update_stock_if_delivery_note_and_purchase_receipt_not_used(doc):
+	"""Without Delivery Notes and Purchase Receipts, the invoice itself moves the stock."""
+	if use_delivery_note_and_purchase_receipt():
+		return
+
+	if doc.get("is_opening") == "Yes" or (doc.get("is_return") and doc.get("return_against")):
+		return
+
+	previous_doc_field = "delivery_note" if doc.doctype == "Sales Invoice" else "purchase_receipt"
+	if any(d.get(previous_doc_field) or d.get("delivered_by_supplier") for d in doc.get("items")):
+		return
+
+	doc.update_stock = 1
+
+
+def hide_delivery_note_and_purchase_receipt_in_dashboard(data):
+	if use_delivery_note_and_purchase_receipt():
+		return data
+
+	for group in data.get("transactions") or []:
+		group["items"] = [d for d in group.get("items") or [] if d not in DELIVERY_AND_RECEIPT_DOCTYPES]
+	data["transactions"] = [group for group in data.get("transactions") or [] if group.get("items")]
+
+	return data

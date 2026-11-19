@@ -80,6 +80,38 @@ class TestAccountsReceivable(ERPNextTestSuite, AccountsTestMixin):
 
 		return credit_note
 
+	def test_pos_receivable(self):
+		filters = {
+			"company": self.company,
+			"party_type": "Customer",
+			"party": [self.customer],
+			"report_date": add_days(today(), 2),
+			"based_on_payment_terms": 0,
+			"range": "30, 60, 90, 120",
+			"show_remarks": False,
+		}
+
+		pos_inv = self.create_sales_invoice(no_payment_schedule=True, do_not_submit=True)
+		pos_inv.posting_date = add_days(today(), 2)
+		pos_inv.is_pos = 1
+		pos_inv.append(
+			"payments",
+			frappe._dict(
+				mode_of_payment="Cash",
+				amount=flt(pos_inv.grand_total / 2),
+			),
+		)
+		pos_inv.disable_rounded_total = 1
+		pos_inv.save()
+		pos_inv.submit()
+
+		report = execute(filters)
+		expected_data = [[pos_inv.grand_total, pos_inv.paid_amount, 0]]
+
+		row = report[1][-1]
+		self.assertEqual(expected_data[0], [row.invoiced, row.paid, row.credit_note])
+		pos_inv.cancel()
+
 	def test_accounts_receivable_with_payment(self):
 		filters = {
 			"company": self.company,

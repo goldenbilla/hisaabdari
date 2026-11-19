@@ -126,6 +126,7 @@ class BootStrapTestData:
 	def make_master_data(self):
 		self.update_system_settings()
 		self.make_fiscal_year()
+		self.set_fifo_as_default_company_valuation_method()
 		self.make_company()
 		self.make_test_account()
 		self.make_supplier_group()
@@ -179,7 +180,28 @@ class BootStrapTestData:
 		stock_settings.auto_insert_price_list_rate_if_missing = 1
 		stock_settings.update_price_list_based_on = "Rate"
 		stock_settings.enable_serial_and_batch_no_for_item = 1
+		# the tests carried over from ERPNext expect its behaviour: Delivery Notes and Purchase Receipts in use
+		stock_settings.use_delivery_note_and_purchase_receipt = 1
 		stock_settings.save()
+
+	def set_fifo_as_default_company_valuation_method(self):
+		# the tests carried over from ERPNext expect FIFO; a new Company defaults to Moving Average
+		if frappe.db.exists(
+			"Property Setter",
+			{"doc_type": "Company", "field_name": "valuation_method", "property": "default"},
+		):
+			return
+
+		frappe.make_property_setter(
+			{
+				"doctype": "Company",
+				"fieldname": "valuation_method",
+				"property": "default",
+				"value": "FIFO",
+				"property_type": "Text",
+			},
+			validate_fields_for_doctype=False,
+		)
 
 	def make_records(self, key, records):
 		doctype = records[0].get("doctype")

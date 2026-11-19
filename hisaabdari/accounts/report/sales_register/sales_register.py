@@ -202,7 +202,10 @@ def get_outstanding_in_company_currency(inv, company_currency):
 
 def get_in_invoice_receivable_credit(inv):
 	# amount the invoice settles against its own receivable, matching the invoice's GL entries
-	return 0.0
+	credit = 0.0
+	if inv.is_pos:  # POS payments and write-off credit the receivable only on POS invoices
+		credit += flt(inv.base_paid_amount) - flt(inv.base_change_amount) + flt(inv.base_write_off_amount)
+	return credit
 
 
 def get_columns(invoice_list, additional_table_columns, include_payments=False):
@@ -459,6 +462,10 @@ def get_invoices(filters, additional_query_columns):
 			si.base_rounded_total,
 			si.base_rounding_adjustment,
 			si.outstanding_amount,
+			si.is_pos,
+			si.base_paid_amount,
+			si.base_change_amount,
+			si.base_write_off_amount,
 			si.is_internal_customer,
 			si.represents_company,
 			si.company,

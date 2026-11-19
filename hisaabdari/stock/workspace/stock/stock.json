@@ -22,7 +22,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Stock Reports",
-   "link_count": 12,
+   "link_count": 11,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -132,16 +132,6 @@
    "label": "Stock Summary",
    "link_count": 0,
    "link_to": "stock-balance",
-   "link_type": "Page",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Warehouse Capacity Summary",
-   "link_count": 0,
-   "link_to": "warehouse-capacity-summary",
    "link_type": "Page",
    "onboard": 0,
    "type": "Link"

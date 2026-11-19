@@ -258,6 +258,17 @@ hisaabdari.accounts.payment_triggers = {
 };
 
 hisaabdari.accounts.pos = {
+	setup: function (doctype) {
+		frappe.ui.form.on(doctype, {
+			mode_of_payment: function (frm, cdt, cdn) {
+				var d = locals[cdt][cdn];
+				hisaabdari.accounts.pos.get_payment_mode_account(frm, d.mode_of_payment, function (account) {
+					frappe.model.set_value(cdt, cdn, "account", account);
+				});
+			},
+		});
+	},
+
 	get_payment_mode_account: function (frm, mode_of_payment, callback) {
 		if (!frm.doc.company) {
 			frappe.throw({ message: __("Please select a Company first."), title: __("Mandatory") });

@@ -403,3 +403,55 @@ class TestExchangeRateRevaluation(ERPNextTestSuite):
 			"Journal Entry", filters={"reversal_of": err_journals.get("revaluation_jv")}, pluck="name"
 		)
 		self.assertIsNotNone(reverse_jv)
+
+	@ERPNextTestSuite.change_settings(
+		"Accounts Settings",
+		{"allow_multi_currency_invoices_against_single_party_account": 1, "allow_stale": 0, "stale_days": 1},
+	)
+	def test_06_missing_exchange_rate_message(self):
+		"""
+		Without a Currency Exchange record the revaluation asks for the rate in plain words
+		"""
+		si = create_sales_invoice(
+			item=self.item,
+			company=self.company,
+			customer=self.customer,
+			debit_to=self.debtors_usd,
+			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
+			rate=100,
+			price_list_rate=100,
+			do_not_submit=1,
+		)
+		si.currency = "USD"
+		si.conversion_rate = 80
+		si.save().submit()
+
+		frappe.db.delete("Currency Exchange", {"date": (">=", add_days(today(), -1))})
+
+		err = frappe.new_doc("Exchange Rate Revaluation")
+		err.company = self.company
+		err.posting_date = today()
+		err.extend("accounts", err.get_accounts_data())
+		row = err.accounts[0]
+		self.assertEqual(row.account_currency, "USD")
+		self.assertEqual(row.new_exchange_rate, 0)
+
+		with self.assertRaisesRegex(
+			frappe.ValidationError,
+			"There is no exchange rate for .*USD.* to .*INR.* on .*Add a Currency Exchange record",
+		):
+			err.save()
+
+		# typing the rate on the row is enough
+		row.new_exchange_rate = 85
+		row.new_balance_in_base_currency = flt(row.new_exchange_rate * flt(row.balance_in_account_currency))
+		row.gain_loss = row.new_balance_in_base_currency - flt(row.balance_in_base_currency)
+		err.set_total_gain_loss()
+		err = err.save().submit()
+
+		err_journals = err.make_jv_entries()
+		je = frappe.get_doc("Journal Entry", err_journals.get("revaluation_jv")).submit()
+		self.assertEqual(je.total_debit, 8500.0)
+		self.assertEqual(je.total_credit, 8500.0)

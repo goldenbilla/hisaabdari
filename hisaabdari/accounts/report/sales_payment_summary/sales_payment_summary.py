@@ -14,11 +14,15 @@ def execute(filters=None):
 
 	columns, data = [], []
 	columns = get_columns(filters)
-	data = get_sales_payment_data(filters, columns)
+	data = (
+		get_pos_sales_payment_data(filters)
+		if filters.get("is_pos")
+		else get_sales_payment_data(filters, columns)
+	)
 	return columns, data
 
 
-def get_columns(filters):
+def get_pos_columns():
 	return [
 		_("Date") + ":Date:80",
 		_("Owner") + ":Data:200",
@@ -26,7 +30,42 @@ def get_columns(filters):
 		_("Sales and Returns") + ":Currency/currency:120",
 		_("Taxes") + ":Currency/currency:120",
 		_("Payments") + ":Currency/currency:120",
+		_("Warehouse") + ":Data:200",
+		_("Cost Center") + ":Data:200",
 	]
+
+
+def get_columns(filters):
+	if filters.get("is_pos"):
+		return get_pos_columns()
+	else:
+		return [
+			_("Date") + ":Date:80",
+			_("Owner") + ":Data:200",
+			_("Payment Mode") + ":Data:240",
+			_("Sales and Returns") + ":Currency/currency:120",
+			_("Taxes") + ":Currency/currency:120",
+			_("Payments") + ":Currency/currency:120",
+		]
+
+
+def get_pos_sales_payment_data(filters):
+	sales_invoice_data = get_pos_invoice_data(filters)
+	data = [
+		[
+			row["posting_date"],
+			row["owner"],
+			row["mode_of_payment"],
+			row["net_total"],
+			row["total_taxes"],
+			row["paid_amount"],
+			row["warehouse"],
+			row["cost_center"],
+		]
+		for row in sales_invoice_data
+	]
+
+	return data
 
 
 def get_sales_payment_data(filters, columns):
@@ -78,11 +117,50 @@ def get_conditions(filters):
 		conditions += " and a.customer = %(customer)s"
 	if filters.get("owner"):
 		conditions += " and a.owner = %(owner)s"
+	if filters.get("is_pos"):
+		conditions += " and a.is_pos = %(is_pos)s"
 	if is_restricted_user():
 		if "permitted_invoices" not in filters:
 			filters["permitted_invoices"] = get_permitted_invoices(filters)
 		conditions += " and a.name in %(permitted_invoices)s"
 	return conditions
+
+
+def get_pos_invoice_data(filters):
+	conditions = get_conditions(filters)
+	result = frappe.db.sql(
+		""
+		"SELECT "
+		'posting_date, owner, sum(net_total) as "net_total", sum(total_taxes) as "total_taxes", '
+		'sum(paid_amount) as "paid_amount", sum(outstanding_amount) as "outstanding_amount", '
+		"mode_of_payment, warehouse, cost_center "
+		"FROM ("
+		"SELECT "
+		"parent, item_code, warehouse, cost_center "
+		"from `tabSales Invoice Item`  group by parent"
+		") t1 "
+		"left join "
+		"(select parent, mode_of_payment from `tabSales Invoice Payment` group by parent) t3 "
+		"on (t3.parent = t1.parent) "
+		"JOIN ("
+		"SELECT "
+		"docstatus, company, customer, is_pos, name, posting_date, owner, "
+		'sum(base_net_total) as "net_total", sum(base_total_taxes_and_charges) as "total_taxes", '
+		'sum(base_paid_amount - base_change_amount) as "paid_amount", '
+		'sum(outstanding_amount) as "outstanding_amount" '
+		"FROM `tabSales Invoice` "
+		"GROUP BY name"
+		") a "
+		"ON ("
+		"t1.parent = a.name) "
+		"WHERE a.docstatus = 1"
+		f" AND {conditions} "
+		"GROUP BY "
+		"owner, posting_date, warehouse",
+		filters,
+		as_dict=1,
+	)
+	return result
 
 
 def get_sales_invoice_data(filters):

@@ -3,6 +3,7 @@
 
 import copy
 import json
+from unittest.mock import patch
 
 import frappe
 from frappe.model.dynamic_links import get_dynamic_link_map
@@ -1338,6 +1339,371 @@ class TestSalesInvoice(ERPNextTestSuite):
 		)
 
 		self.assertTrue(gle)
+
+	def test_pos_gl_entry_with_perpetual_inventory(self):
+		make_purchase_receipt(
+			company="_Test Company with perpetual inventory",
+			item_code="_Test FG Item",
+			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
+		)
+
+		pos = create_sales_invoice(
+			company="_Test Company with perpetual inventory",
+			debit_to="Debtors - TCP1",
+			item_code="_Test FG Item",
+			warehouse="Stores - TCP1",
+			income_account="Sales - TCP1",
+			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
+			do_not_save=True,
+		)
+
+		pos.is_pos = 1
+		pos.update_stock = 1
+
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 50})
+
+		taxes = get_taxes_and_charges()
+		pos.taxes = []
+		for tax in taxes:
+			pos.append("taxes", tax)
+
+		si = frappe.copy_doc(pos)
+		si.insert()
+		si.submit()
+		self.assertEqual(si.paid_amount, 100.0)
+
+		self.validate_pos_gl_entry(si, pos, 50)
+
+	def test_pos_returns_with_repayment(self):
+		from hisaabdari.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
+
+		pos = create_sales_invoice(qty=10, do_not_save=True)
+
+		pos.is_pos = 1
+		pos.account_for_change_amount = "Cash - _TC"
+
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 500})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 512.07})
+		pos.insert()
+		pos.submit()
+
+		pos_return = make_sales_return(pos.name)
+
+		pos_return.insert()
+		pos_return.submit()
+
+		self.assertEqual(pos_return.get("payments")[0].amount, -500)
+		self.assertEqual(pos_return.get("payments")[1].amount, -500)
+
+	def test_pos_change_amount(self):
+		make_purchase_receipt(
+			company="_Test Company with perpetual inventory",
+			item_code="_Test FG Item",
+			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
+		)
+
+		pos = create_sales_invoice(
+			company="_Test Company with perpetual inventory",
+			debit_to="Debtors - TCP1",
+			item_code="_Test FG Item",
+			warehouse="Stores - TCP1",
+			income_account="Sales - TCP1",
+			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
+			do_not_save=True,
+		)
+
+		pos.is_pos = 1
+		pos.update_stock = 1
+
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 60})
+
+		pos.write_off_outstanding_amount_automatically = 1
+		pos.insert()
+		pos.submit()
+
+		self.assertEqual(pos.grand_total, 100.0)
+		self.assertEqual(pos.write_off_amount, 0)
+
+	def test_auto_write_off_amount(self):
+		make_purchase_receipt(
+			company="_Test Company with perpetual inventory",
+			item_code="_Test FG Item",
+			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
+		)
+
+		pos = create_sales_invoice(
+			company="_Test Company with perpetual inventory",
+			debit_to="Debtors - TCP1",
+			item_code="_Test FG Item",
+			warehouse="Stores - TCP1",
+			income_account="Sales - TCP1",
+			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
+			do_not_save=True,
+		)
+
+		pos.is_pos = 1
+		pos.update_stock = 1
+
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 40})
+
+		pos.write_off_account = "_Test Write Off - TCP1"
+		pos.write_off_cost_center = "Main - TCP1"
+		pos.write_off_outstanding_amount_automatically = 1
+		pos.insert()
+		pos.submit()
+
+		self.assertEqual(pos.grand_total, 100.0)
+		self.assertEqual(pos.write_off_amount, 10)
+
+	def test_ledger_entries_of_return_pos_invoice(self):
+		pos = create_sales_invoice(do_not_save=True)
+		pos.is_pos = 1
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 100})
+		pos.save().submit()
+		self.assertEqual(pos.outstanding_amount, 0.0)
+		self.assertEqual(pos.status, "Paid")
+
+		from hisaabdari.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
+
+		pos_return = make_sales_return(pos.name)
+		pos_return.save().submit()
+		pos_return.reload()
+		pos.reload()
+		self.assertEqual(pos_return.is_return, 1)
+		self.assertEqual(pos_return.return_against, pos.name)
+		self.assertEqual(pos_return.outstanding_amount, 0.0)
+		self.assertEqual(pos_return.status, "Return")
+		self.assertEqual(pos.outstanding_amount, 0.0)
+		self.assertEqual(pos.status, "Credit Note Issued")
+
+		expected = (
+			("Cash - _TC", 0.0, 100.0, pos_return.name, None),
+			("Debtors - _TC", 0.0, 100.0, pos_return.name, pos_return.name),
+			("Debtors - _TC", 100.0, 0.0, pos_return.name, pos_return.name),
+			("Sales - _TC", 100.0, 0.0, pos_return.name, None),
+		)
+		res = frappe.db.get_all(
+			"GL Entry",
+			filters={"voucher_no": pos_return.name, "is_cancelled": 0},
+			fields=["account", "debit", "credit", "voucher_no", "against_voucher"],
+			order_by="account, debit, credit",
+			as_list=1,
+		)
+		self.assertEqual(expected, res)
+
+	def test_pos_with_no_gl_entry_for_change_amount(self):
+		make_purchase_receipt(
+			company="_Test Company with perpetual inventory",
+			item_code="_Test FG Item",
+			warehouse="Stores - TCP1",
+			cost_center="Main - TCP1",
+		)
+
+		pos = create_sales_invoice(
+			company="_Test Company with perpetual inventory",
+			debit_to="Debtors - TCP1",
+			item_code="_Test FG Item",
+			warehouse="Stores - TCP1",
+			income_account="Sales - TCP1",
+			expense_account="Cost of Goods Sold - TCP1",
+			cost_center="Main - TCP1",
+			do_not_save=True,
+		)
+
+		pos.is_pos = 1
+		pos.update_stock = 1
+
+		taxes = get_taxes_and_charges()
+		pos.taxes = []
+		for tax in taxes:
+			pos.append("taxes", tax)
+
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 60})
+
+		pos.insert()
+		pos.submit()
+
+		self.assertEqual(pos.grand_total, 100.0)
+		self.assertEqual(pos.change_amount, 10)
+
+		self.validate_pos_gl_entry(pos, pos, 60, validate_without_change_gle=True)
+
+	def test_pos_change_amount_multi_currency_gl_entry(self):
+		si = create_sales_invoice(do_not_save=True)
+		si.is_pos = 1
+		si.currency = "USD"
+		si.conversion_rate = 50
+		si.party_account_currency = "USD"
+		si.account_for_change_amount = "Cash - _TC"
+		si.change_amount = 50
+		si.base_change_amount = 2500
+		si.append(
+			"payments",
+			{"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 150, "base_amount": 7500},
+		)
+
+		gl_entries = []
+		si.make_pos_gl_entries(gl_entries)
+
+		debtors_entry = next(entry for entry in gl_entries if entry["account"] == si.debit_to)
+		cash_entry = next(entry for entry in gl_entries if entry["account"] == "Cash - _TC")
+
+		self.assertEqual(flt(debtors_entry["credit"]), 5000.0)
+		self.assertEqual(flt(cash_entry["debit"]), 5000.0)
+
+	def validate_pos_gl_entry(self, si, pos, cash_amount, validate_without_change_gle=False):
+		if validate_without_change_gle:
+			cash_amount -= pos.change_amount
+
+		# check stock ledger entries
+		sle = frappe.db.sql(
+			"""select * from `tabStock Ledger Entry`
+			where voucher_type = 'Sales Invoice' and voucher_no = %s""",
+			si.name,
+			as_dict=1,
+		)[0]
+		self.assertTrue(sle)
+		self.assertEqual(
+			[sle.item_code, sle.warehouse, sle.actual_qty], ["_Test FG Item", "Stores - TCP1", -1.0]
+		)
+
+		# check gl entries
+		gl_entries = frappe.db.sql(
+			"""select account, debit, credit
+			from `tabGL Entry` where voucher_type='Sales Invoice' and voucher_no=%s
+			order by account asc, debit asc, credit asc""",
+			si.name,
+			as_dict=1,
+		)
+		self.assertTrue(gl_entries)
+
+		stock_in_hand = get_inventory_account("_Test Company with perpetual inventory")
+		expected_gl_entries = sorted(
+			[
+				[si.debit_to, 100.0, 0.0],
+				[pos.items[0].income_account, 0.0, 89.09],
+				["Round Off - TCP1", 0.0, 0.01],
+				[pos.taxes[0].account_head, 0.0, 10.69],
+				[pos.taxes[1].account_head, 0.0, 0.21],
+				[stock_in_hand, 0.0, abs(sle.stock_value_difference)],
+				[pos.items[0].expense_account, abs(sle.stock_value_difference), 0.0],
+				[si.debit_to, 0.0, 50.0],
+				[si.debit_to, 0.0, cash_amount],
+				["_Test Bank - TCP1", 50, 0.0],
+				["Cash - TCP1", cash_amount, 0.0],
+			]
+		)
+
+		for i, gle in enumerate(sorted(gl_entries, key=lambda gle: gle.account)):
+			self.assertEqual(expected_gl_entries[i][0], gle.account)
+			self.assertEqual(expected_gl_entries[i][1], gle.debit)
+			self.assertEqual(expected_gl_entries[i][2], gle.credit)
+
+		si.cancel()
+		gle = frappe.db.sql(
+			"""select * from `tabGL Entry`
+			where voucher_type='Sales Invoice' and voucher_no=%s""",
+			si.name,
+		)
+
+		self.assertTrue(gle)
+
+	def test_pos_si_without_payment(self):
+		pos = copy.deepcopy(dict(self.globalTestRecords["Sales Invoice"][1]))
+		pos["is_pos"] = 1
+		pos["update_stock"] = 1
+
+		# no cash mode of payment is set up for the company, so no payment row is added
+		with patch(
+			"hisaabdari.accounts.doctype.sales_invoice.sales_invoice.get_default_mode_of_payment",
+			return_value=None,
+		):
+			si = frappe.copy_doc(pos)
+			si.insert()
+			self.assertEqual(len(si.payments), 0)
+
+			# Check that the invoice cannot be submitted without payments
+			self.assertRaises(frappe.ValidationError, si.submit)
+
+	def test_is_paid_adds_default_payment_row(self):
+		# one tick and save: the default cash mode of payment is added with the full amount
+		si = create_sales_invoice(is_pos=1, qty=2, rate=150, do_not_save=True)
+		self.assertEqual(len(si.payments), 0)
+		si.insert()
+
+		self.assertEqual(len(si.payments), 1)
+		self.assertEqual(si.payments[0].mode_of_payment, "Cash")
+		self.assertEqual(si.payments[0].account, "Cash - _TC")
+		self.assertEqual(si.payments[0].type, "Cash")
+		self.assertEqual(si.payments[0].amount, 300.0)
+		self.assertEqual(si.paid_amount, 300.0)
+		self.assertEqual(si.change_amount, 0.0)
+		self.assertEqual(si.outstanding_amount, 0.0)
+
+		si.submit()
+		si.reload()
+		self.assertEqual(si.outstanding_amount, 0.0)
+		self.assertEqual(si.status, "Paid")
+
+		expected = (
+			("Cash - _TC", 300.0, 0.0),
+			("Debtors - _TC", 0.0, 300.0),
+			("Debtors - _TC", 300.0, 0.0),
+			("Sales - _TC", 0.0, 300.0),
+		)
+		res = frappe.db.get_all(
+			"GL Entry",
+			filters={"voucher_no": si.name, "is_cancelled": 0},
+			fields=["account", "debit", "credit"],
+			order_by="account, debit, credit",
+			as_list=1,
+		)
+		self.assertEqual(expected, res)
+
+		# submitting directly, without saving first, gives the same result
+		si = create_sales_invoice(is_pos=1, rate=120)
+		self.assertEqual(si.docstatus, 1)
+		self.assertEqual([(d.mode_of_payment, d.amount) for d in si.payments], [("Cash", 120.0)])
+		self.assertEqual(si.outstanding_amount, 0.0)
+		self.assertEqual(si.status, "Paid")
+
+	def test_is_paid_keeps_payment_rows_of_user(self):
+		# rows entered by the user are left as they are, also when they pay only a part
+		si = create_sales_invoice(is_pos=1, qty=1, rate=100, do_not_save=True)
+		si.append("payments", {"mode_of_payment": "Bank Draft", "amount": 25})
+		si.append("payments", {"mode_of_payment": "Cash", "amount": 15})
+		si.insert()
+
+		self.assertEqual(
+			[(d.mode_of_payment, d.account, d.amount) for d in si.payments],
+			[("Bank Draft", "_Test Bank - _TC", 25.0), ("Cash", "Cash - _TC", 15.0)],
+		)
+		self.assertEqual(si.paid_amount, 40.0)
+		self.assertEqual(si.outstanding_amount, 60.0)
+
+		si.submit()
+		si.reload()
+		self.assertEqual(si.outstanding_amount, 60.0)
+		self.assertEqual(si.status, "Partly Paid")
+
+		# unticking "Is Paid" removes the payment rows
+		si = create_sales_invoice(is_pos=1, rate=100, do_not_submit=True)
+		self.assertEqual(si.paid_amount, 100.0)
+		si.is_pos = 0
+		si.save()
+		self.assertEqual(len(si.payments), 0)
+		self.assertEqual(si.paid_amount, 0.0)
+		self.assertEqual(si.outstanding_amount, 100.0)
 
 	def test_sales_invoice_gl_entry_with_perpetual_inventory_no_item_code(self):
 		si = create_sales_invoice(
@@ -4130,6 +4496,50 @@ class TestSalesInvoice(ERPNextTestSuite):
 		]
 		self.assertEqual(expected, actual)
 
+	def test_pos_returns_without_update_outstanding_for_self(self):
+		from hisaabdari.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
+
+		pos = create_sales_invoice(qty=10, do_not_save=True)
+		pos.is_pos = 1
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 500})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 500})
+		pos.save().submit()
+
+		pos_return = make_sales_return(pos.name)
+		pos_return.update_outstanding_for_self = False
+		pos_return.save().submit()
+
+		gle = frappe.qb.DocType("GL Entry")
+		res = (
+			frappe.qb.from_(gle)
+			.select(gle.against_voucher)
+			.distinct()
+			.where(
+				gle.is_cancelled.eq(0) & gle.voucher_no.eq(pos_return.name) & gle.against_voucher.notnull()
+			)
+			.run(as_list=1)
+		)
+		self.assertEqual(len(res), 1)
+		self.assertEqual(res[0][0], pos_return.return_against)
+
+	def test_pos_returns_with_party_account_currency(self):
+		from hisaabdari.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
+
+		pos = create_sales_invoice(
+			customer="_Test Customer USD",
+			currency="USD",
+			conversion_rate=86.595000000,
+			qty=2,
+			do_not_save=True,
+		)
+		pos.is_pos = 1
+		pos.debit_to = "_Test Receivable USD - _TC"
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 20.35})
+		pos.save().submit()
+
+		pos_return = make_sales_return(pos.name)
+		self.assertEqual(abs(pos_return.payments[0].amount), pos.payments[0].amount)
+
 	def test_validation_on_opening_invoice_with_rounding(self):
 		si = create_sales_invoice(qty=1, rate=99.98, do_not_submit=True)
 		si.is_opening = "Yes"
@@ -4746,6 +5156,7 @@ def create_sales_invoice(**args):
 	si.customer = args.customer or "_Test Customer"
 	si.debit_to = args.debit_to or "Debtors - _TC"
 	si.update_stock = args.update_stock
+	si.is_pos = args.is_pos
 	si.is_return = args.is_return
 	si.return_against = args.return_against
 	si.currency = args.currency or "INR"
@@ -4833,6 +5244,7 @@ def create_sales_invoice_against_cost_center(**args):
 	si.customer = args.customer or "_Test Customer"
 	si.debit_to = args.debit_to or "Debtors - _TC"
 	si.update_stock = args.update_stock
+	si.is_pos = args.is_pos
 	si.is_return = args.is_return
 	si.return_against = args.return_against
 	si.currency = args.currency or "INR"

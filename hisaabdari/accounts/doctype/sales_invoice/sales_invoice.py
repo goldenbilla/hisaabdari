@@ -19,6 +19,7 @@ from frappe.utils import (
 from frappe.utils.data import comma_and
 
 import hisaabdari
+from hisaabdari.accounts.doctype.mode_of_payment.mode_of_payment import validate_enabled_mode_of_payment
 from hisaabdari.accounts.doctype.repost_accounting_ledger.repost_accounting_ledger import (
 	validate_docs_for_voucher_types,
 )
@@ -38,6 +39,9 @@ from hisaabdari.controllers.selling_controller import SellingController
 from hisaabdari.setup.doctype.company.company import update_company_current_month_sales
 from hisaabdari.setup.doctype.terms_and_conditions.terms_and_conditions import clear_inapplicable_terms
 from hisaabdari.stock.doctype.delivery_note.delivery_note import update_billed_amount_based_on_so
+from hisaabdari.stock.doctype.stock_settings.stock_settings import (
+	set_update_stock_if_delivery_note_and_purchase_receipt_not_used,
+)
 from hisaabdari.stock.utils import get_bin_qty_map
 
 form_grid_templates = {"items": "templates/form_grid/item_grid.html"}
@@ -118,6 +122,7 @@ class SalesInvoice(SellingController):
 		is_debit_note: DF.Check
 		is_internal_customer: DF.Check
 		is_opening: DF.Literal["No", "Yes"]
+		is_pos: DF.Check
 		is_return: DF.Check
 		item_wise_tax_details: DF.Table[ItemWiseTaxDetail]
 		items: DF.Table[SalesInvoiceItem]
@@ -235,12 +240,14 @@ class SalesInvoice(SellingController):
 			self.indicator_title = _("Paid")
 
 	def validate(self):
+		set_update_stock_if_delivery_note_and_purchase_receipt_not_used(self)
 		self.validate_auto_set_posting_time()
 		super().validate()
 
-		if not self.is_debit_note:
+		if not (self.is_pos or self.is_debit_note):
 			self.so_dn_required()
 
+		self.validate_pos_return()
 		self.validate_with_previous_doc()
 		self.validate_uom_is_integer("stock_uom", "stock_qty")
 		self.validate_uom_is_integer("uom", "qty")
@@ -254,6 +261,9 @@ class SalesInvoice(SellingController):
 		validate_inter_company_party(
 			self.doctype, self.customer, self.company, self.inter_company_invoice_reference
 		)
+
+		if cint(self.is_pos):
+			self.validate_pos()
 
 		self.validate_dropship_item()
 
@@ -273,12 +283,24 @@ class SalesInvoice(SellingController):
 		self.validate_multiple_billing("Delivery Note", "dn_detail", "amount")
 
 		self.set_status()
+		if self.is_pos and not self.is_return:
+			self.verify_payment_amount_is_positive()
+
+		# validate amount in mode of payments for returned invoices for pos must be negative
+		if self.is_pos and self.is_return:
+			self.verify_payment_amount_is_negative()
+
+		self.allow_write_off_only_on_pos()
 		self.reset_default_field_value("set_warehouse", "items", "warehouse")
 
 	def validate_accounts(self):
+		self.validate_write_off_account()
+		self.validate_account_for_change_amount()
 		self.validate_income_account()
 
 	def validate_for_repost(self):
+		self.validate_write_off_account()
+		self.validate_account_for_change_amount()
 		self.validate_income_account()
 		validate_docs_for_voucher_types(["Sales Invoice"])
 
@@ -290,10 +312,16 @@ class SalesInvoice(SellingController):
 		for item in self.get("items"):
 			validate_account_head(item.idx, item.income_account, self.company, _("Income"))
 
+	def before_save(self):
+		self.set_paid_amount()
+		self.set_account_for_mode_of_payment()
+
 	def before_submit(self):
 		self.add_remarks()
 
 	def on_submit(self):
+		self.validate_pos_paid_amount()
+
 		self.check_prev_docstatus()
 
 		if self.is_return and not self.update_billed_amount_in_sales_order:
@@ -304,6 +332,7 @@ class SalesInvoice(SellingController):
 		self.update_prevdoc_status()
 
 		self.update_billing_status_in_dn()
+		self.clear_unallocated_mode_of_payments()
 
 		# Updating stock ledger should always be called after updating prevdoc status,
 		# because updating reserved qty in bin depends upon updated delivered qty in SO
@@ -331,7 +360,7 @@ class SalesInvoice(SellingController):
 				self.check_credit_limit()
 				self.check_overdue_billing_threshold()
 
-		if not self.is_return:
+		if cint(self.is_pos) != 1 and not self.is_return:
 			self.update_against_document_in_jv()
 
 		if frappe.get_single_value("Selling Settings", "sales_update_frequency") == "Each Transaction":
@@ -340,6 +369,23 @@ class SalesInvoice(SellingController):
 
 		if self.is_return and self.return_against:
 			frappe.get_doc(self.doctype, self.return_against).set_status(update=True)
+
+	def validate_pos_return(self):
+		if self.is_pos and self.is_return:
+			total_amount_in_payments = 0
+			for payment in self.payments:
+				total_amount_in_payments += payment.amount
+			invoice_total = self.rounded_total or self.grand_total
+			if total_amount_in_payments < invoice_total:
+				frappe.throw(_("Total payments amount can't be greater than {}").format(-invoice_total))
+
+	def validate_pos_paid_amount(self):
+		if len(self.payments) == 0 and self.is_pos and flt(self.grand_total) > 0:
+			frappe.throw(
+				_(
+					"This invoice is marked as paid, but no payment is entered. Add a row with the mode of payment and the amount in the Payments table, or untick 'Is Paid'."
+				)
+			)
 
 	def on_cancel(self):
 		check_if_return_invoice_linked_with_payment_entry(self)
@@ -471,6 +517,8 @@ class SalesInvoice(SellingController):
 
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
+		pos = self.set_pos_fields(for_validate)
+
 		if not self.debit_to:
 			self.debit_to = get_party_account("Customer", self.customer, self.company)
 			self.party_account_currency = frappe.db.get_value(
@@ -487,9 +535,15 @@ class SalesInvoice(SellingController):
 
 		super().set_missing_values(for_validate)
 
+		if pos:
+			return pos
+
 	def on_update_after_submit(self):
 		fields_to_check = [
 			"additional_discount_account",
+			"cash_bank_account",
+			"account_for_change_amount",
+			"write_off_account",
 			"unrealized_profit_loss_account",
 			"is_opening",
 		]
@@ -501,6 +555,74 @@ class SalesInvoice(SellingController):
 		if needs_repost:
 			self.validate_for_repost()
 			self.repost_accounting_entries()
+
+	def set_paid_amount(self):
+		paid_amount = 0.0
+		base_paid_amount = 0.0
+
+		if not cint(self.is_pos) and self.is_return:
+			self.set("payments", [])
+			self.paid_amount = paid_amount
+			self.base_paid_amount = base_paid_amount
+			return
+
+		for data in self.payments:
+			data.base_amount = flt(data.amount * self.conversion_rate, self.precision("base_paid_amount"))
+			paid_amount += data.amount
+			base_paid_amount += data.base_amount
+
+		self.paid_amount = paid_amount
+		self.base_paid_amount = base_paid_amount
+
+	@frappe.whitelist()
+	def set_account_for_mode_of_payment(self):
+		for payment in self.payments:
+			payment.account = get_bank_cash_account(payment.mode_of_payment, self.company).get("account")
+
+	def set_pos_fields(self, for_validate=False):
+		"""Set payment related fields of an invoice that is paid on the spot"""
+		if cint(self.is_pos) != 1:
+			return
+
+		if not self.account_for_change_amount:
+			self.account_for_change_amount = frappe.get_cached_value(
+				"Company", self.company, "default_cash_account"
+			)
+
+		if not self.get("payments") and not self.is_return:
+			set_default_mode_of_payment(self)
+
+		return {"set_default_payment": 1}
+
+	def set_total_amount_to_default_payment(self):
+		"""Put the amount to pay on the default payment row, as the form does, when no amount is entered yet.
+		Returns True if a payment row was changed."""
+		if cint(self.is_pos) != 1 or self.is_return:
+			return False
+
+		payments = self.get("payments") or []
+		default_payment = next((d for d in payments if d.default), None)
+		if not default_payment or any(flt(d.amount) for d in payments):
+			return False
+
+		# outstanding amount is the amount to pay, in the customer account currency
+		total_amount_to_pay = flt(self.outstanding_amount)
+		if total_amount_to_pay <= 0:
+			return False
+
+		if self.party_account_currency == self.currency:
+			default_payment.amount = flt(total_amount_to_pay, default_payment.precision("amount"))
+		else:
+			default_payment.amount = flt(
+				total_amount_to_pay / self.conversion_rate, default_payment.precision("amount")
+			)
+
+		return True
+
+	def calculate_taxes_and_totals(self):
+		super().calculate_taxes_and_totals()
+		if self.set_total_amount_to_default_payment():
+			super().calculate_taxes_and_totals()
 
 	def get_company_abbr(self):
 		return frappe.db.sql("select abbr from tabCompany where name=%s", self.company)[0][0]
@@ -539,6 +661,15 @@ class SalesInvoice(SellingController):
 			frappe.throw(msg, title=_("Invalid Account"))
 
 		self.party_account_currency = account.account_currency
+
+	def clear_unallocated_mode_of_payments(self):
+		self.set("payments", self.get("payments", {"amount": ["not in", [0, None, ""]]}))
+
+		frappe.db.sql(
+			"""delete from `tabSales Invoice Payment` where parent = %s
+			and amount = 0""",
+			self.name,
+		)
 
 	def validate_with_previous_doc(self):
 		super().validate_with_previous_doc(
@@ -651,7 +782,7 @@ class SalesInvoice(SellingController):
 			return
 
 		prev_doc_field_map = {
-			"Sales Order": ["so_required", None],
+			"Sales Order": ["so_required", "is_pos"],
 			"Delivery Note": ["dn_required", "update_stock"],
 		}
 		for key, value in prev_doc_field_map.items():
@@ -690,6 +821,32 @@ class SalesInvoice(SellingController):
 					comma_and(notes)
 				),
 			)
+
+	def validate_pos(self):
+		for payment in self.get("payments") or []:
+			validate_enabled_mode_of_payment(payment.mode_of_payment)
+
+		if self.is_return:
+			invoice_total = self.rounded_total or self.grand_total
+			if abs(flt(self.paid_amount)) + abs(flt(self.write_off_amount)) - abs(
+				flt(invoice_total)
+			) > 1.0 / (10.0 ** (self.precision("grand_total") + 1.0)):
+				frappe.throw(_("Paid amount + Write Off Amount can not be greater than Grand Total"))
+
+	def allow_write_off_only_on_pos(self):
+		if not self.is_pos and self.write_off_account:
+			self.write_off_account = None
+
+	def validate_write_off_account(self):
+		if flt(self.write_off_amount) and not self.write_off_account:
+			self.write_off_account = frappe.get_cached_value("Company", self.company, "write_off_account")
+
+		if flt(self.write_off_amount) and not self.write_off_account:
+			msgprint(_("Please enter Write Off Account"), raise_exception=1)
+
+	def validate_account_for_change_amount(self):
+		if flt(self.change_amount) and not self.account_for_change_amount:
+			msgprint(_("Please enter Account for Change Amount"), raise_exception=1)
 
 	def validate_dropship_item(self):
 		"""If items are drop shipped, stock cannot be updated."""
@@ -739,7 +896,7 @@ class SalesInvoice(SellingController):
 
 		if gl_entries:
 			# if POS and amount is written off, updating outstanding amt after posting all gl entries
-			update_outstanding = "No" if self.write_off_account else "Yes"
+			update_outstanding = "No" if (cint(self.is_pos) or self.write_off_account) else "Yes"
 
 			if self.docstatus == 1:
 				make_gl_entries(
@@ -786,6 +943,9 @@ class SalesInvoice(SellingController):
 		# merge gl entries before adding pos entries
 		gl_entries = merge_similar_entries(gl_entries)
 
+		self.make_pos_gl_entries(gl_entries)
+
+		self.make_write_off_gl_entry(gl_entries)
 		self.make_gle_for_rounding_adjustment(gl_entries)
 
 		self.set_transaction_currency_and_rate_in_gl_map(gl_entries)
@@ -1021,12 +1181,129 @@ class SalesInvoice(SellingController):
 		for dn in set(updated_delivery_notes):
 			frappe.get_doc("Delivery Note", dn).update_billing_percentage(update_modified=update_modified)
 
+	def make_pos_gl_entries(self, gl_entries):
+		if cint(self.is_pos):
+			for payment_mode in self.payments:
+				if payment_mode.account == self.account_for_change_amount:
+					payment_mode.base_amount -= flt(self.base_change_amount)
+
+				against_voucher = self.name
+				if self.is_return and self.return_against and not self.update_outstanding_for_self:
+					against_voucher = self.return_against
+
+				if payment_mode.base_amount:
+					# POS, make payment entries
+					gl_entries.append(
+						self.get_gl_dict(
+							{
+								"account": self.debit_to,
+								"party_type": "Customer",
+								"party": self.customer,
+								"against": payment_mode.account,
+								"credit": payment_mode.base_amount,
+								"credit_in_account_currency": payment_mode.base_amount
+								if self.party_account_currency == self.company_currency
+								else payment_mode.amount,
+								"credit_in_transaction_currency": payment_mode.amount,
+								"against_voucher": against_voucher,
+								"against_voucher_type": self.doctype,
+								"cost_center": self.cost_center,
+							},
+							self.party_account_currency,
+							item=self,
+						)
+					)
+
+					payment_mode_account_currency = get_account_currency(payment_mode.account)
+					gl_entries.append(
+						self.get_gl_dict(
+							{
+								"account": payment_mode.account,
+								"against": self.customer,
+								"debit": payment_mode.base_amount,
+								"debit_in_account_currency": payment_mode.base_amount
+								if payment_mode_account_currency == self.company_currency
+								else payment_mode.amount,
+								"debit_in_transaction_currency": payment_mode.amount,
+								"cost_center": self.cost_center,
+							},
+							payment_mode_account_currency,
+							item=self,
+						)
+					)
+
+	def make_write_off_gl_entry(self, gl_entries):
+		# write off entries, applicable if only pos
+		if (
+			self.is_pos
+			and self.write_off_account
+			and flt(self.write_off_amount, self.precision("write_off_amount"))
+		):
+			write_off_account_currency = get_account_currency(self.write_off_account)
+			default_cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
+
+			gl_entries.append(
+				self.get_gl_dict(
+					{
+						"account": self.debit_to,
+						"party_type": "Customer",
+						"party": self.customer,
+						"against": self.write_off_account,
+						"credit": flt(self.base_write_off_amount, self.precision("base_write_off_amount")),
+						"credit_in_account_currency": (
+							flt(self.base_write_off_amount, self.precision("base_write_off_amount"))
+							if self.party_account_currency == self.company_currency
+							else flt(self.write_off_amount, self.precision("write_off_amount"))
+						),
+						"credit_in_transaction_currency": flt(
+							self.write_off_amount, self.precision("write_off_amount")
+						),
+						"against_voucher": self.return_against if cint(self.is_return) else self.name,
+						"against_voucher_type": self.doctype,
+						"cost_center": self.cost_center,
+					},
+					self.party_account_currency,
+					item=self,
+				)
+			)
+			gl_entries.append(
+				self.get_gl_dict(
+					{
+						"account": self.write_off_account,
+						"against": self.customer,
+						"debit": flt(self.base_write_off_amount, self.precision("base_write_off_amount")),
+						"debit_in_account_currency": (
+							flt(self.base_write_off_amount, self.precision("base_write_off_amount"))
+							if write_off_account_currency == self.company_currency
+							else flt(self.write_off_amount, self.precision("write_off_amount"))
+						),
+						"debit_in_transaction_currency": flt(
+							self.write_off_amount, self.precision("write_off_amount")
+						),
+						"cost_center": self.cost_center or self.write_off_cost_center or default_cost_center,
+					},
+					write_off_account_currency,
+					item=self,
+				)
+			)
+
 	def on_recurring(self, reference_doc, auto_repeat_doc):
 		super().on_recurring(reference_doc, auto_repeat_doc)
+		self.set("write_off_amount", reference_doc.get("write_off_amount"))
 		self.po_no = reference_doc.po_no
 		# The payment schedule is rebuilt from the template, relative to the new posting date.
 		self.payment_terms_template = reference_doc.payment_terms_template
 		self.due_date = None
+
+	def verify_payment_amount_is_positive(self):
+		for entry in self.payments:
+			if entry.amount < 0:
+				frappe.throw(_("Row #{0} (Payment Table): Amount must be positive").format(entry.idx))
+
+	def verify_payment_amount_is_negative(self):
+		for entry in self.payments:
+			if entry.amount > 0:
+				frappe.throw(_("Row #{0} (Payment Table): Amount must be negative").format(entry.idx))
 
 	def set_status(self, update=False, status=None, update_modified=True):
 		if self.is_new():
@@ -1082,7 +1359,7 @@ def is_overdue(doc, total):
 		return
 
 	today = getdate()
-	if not doc.get("payment_schedule"):
+	if doc.get("is_pos") or not doc.get("payment_schedule"):
 		return getdate(doc.due_date) < today
 
 	# calculate payable amount till date
@@ -1174,6 +1451,67 @@ def unlink_inter_company_doc(doctype, name, inter_company_reference):
 
 	remaining_counterpart = frappe.db.get_value(doctype, {ref_field: inter_company_reference, "docstatus": 1})
 	frappe.db.set_value(ref_doc, inter_company_reference, ref_field, remaining_counterpart or "")
+
+
+def get_all_mode_of_payments(doc):
+	ModeOfPaymentAccount = frappe.qb.DocType("Mode of Payment Account")
+	ModeOfPayment = frappe.qb.DocType("Mode of Payment")
+
+	query = (
+		frappe.qb.from_(ModeOfPaymentAccount)
+		.join(ModeOfPayment)
+		.on(ModeOfPaymentAccount.parent == ModeOfPayment.name)
+		.select(
+			ModeOfPaymentAccount.default_account, ModeOfPaymentAccount.parent, ModeOfPayment.type.as_("type")
+		)
+		.where(ModeOfPaymentAccount.company == doc.company)
+		.where(ModeOfPayment.enabled == 1)
+	)
+
+	return query.run(as_dict=1)
+
+
+def get_mode_of_payment_info(mode_of_payment, company):
+	return frappe.db.sql(
+		"""
+		select mpa.default_account, mpa.parent, mp.type as type
+		from `tabMode of Payment Account` mpa,`tabMode of Payment` mp
+		where mpa.parent = mp.name and mpa.company = %s and mp.enabled = 1 and mp.name = %s""",
+		(company, mode_of_payment),
+		as_dict=1,
+	)
+
+
+def get_default_mode_of_payment(company):
+	"""The enabled Cash type Mode of Payment that has an account for the company.
+	The one on the default cash account of the company is preferred."""
+	modes = sorted(
+		(d for d in get_all_mode_of_payments(frappe._dict(company=company)) if d.type == "Cash"),
+		key=lambda d: d.parent,
+	)
+	if not modes:
+		return None
+
+	default_cash_account = frappe.get_cached_value("Company", company, "default_cash_account")
+	return next((d for d in modes if d.default_account == default_cash_account), modes[0])
+
+
+def set_default_mode_of_payment(doc):
+	"""Add one payment row with the default cash Mode of Payment of the company.
+	The amount to pay is put on the row when totals are calculated."""
+	payment_mode = get_default_mode_of_payment(doc.company)
+	if not payment_mode:
+		return
+
+	doc.append(
+		"payments",
+		{
+			"default": 1,
+			"mode_of_payment": payment_mode.parent,
+			"account": payment_mode.default_account,
+			"type": payment_mode.type,
+		},
+	)
 
 
 @frappe.whitelist()

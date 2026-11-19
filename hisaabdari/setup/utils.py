@@ -3,7 +3,7 @@
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, flt, getdate
+from frappe.utils import add_days, flt, formatdate, getdate
 from frappe.utils.data import now_datetime
 from frappe.utils.nestedset import get_root_of
 
@@ -86,6 +86,17 @@ def get_exchange_rate(from_currency, to_currency, transaction_date=None, args=No
 		).format(from_currency, to_currency, transaction_date)
 	)
 	return 0.0
+
+
+def throw_exchange_rate_not_found(from_currency, to_currency, transaction_date=None):
+	frappe.throw(
+		_(
+			"There is no exchange rate for {0} to {1} on {2}. Add a Currency Exchange record for these currencies (Accounts > Currency Exchange), or type the exchange rate on the document."
+		).format(
+			frappe.bold(from_currency), frappe.bold(to_currency), frappe.bold(formatdate(transaction_date))
+		),
+		title=_("Exchange Rate Missing"),
+	)
 
 
 def enable_all_roles_and_domains():

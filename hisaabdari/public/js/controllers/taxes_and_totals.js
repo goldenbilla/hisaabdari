@@ -51,6 +51,11 @@ hisaabdari.taxes_and_totals = class TaxesAndTotals extends hisaabdari.stock.Stoc
 			this.calculate_total_advance(update_paid_amount);
 		}
 
+		if (this.frm.doc.doctype == "Sales Invoice" && this.frm.doc.is_pos && this.frm.doc.is_return) {
+			await this.set_total_amount_to_default_mop();
+			this.calculate_paid_amount();
+		}
+
 		// Update paid amount on return/debit note creation
 		if (
 			this.frm.doc.doctype === "Purchase Invoice" &&
@@ -1112,6 +1117,13 @@ hisaabdari.taxes_and_totals = class TaxesAndTotals extends hisaabdari.stock.Stoc
 	}
 
 	calculate_outstanding_amount(update_paid_amount) {
+		// NOTE:
+		// paid_amount and write_off_amount is only for POS Invoice
+		// total_advance is only for non POS Invoice
+		if (this.frm.doc.doctype == "Sales Invoice" && this.frm.doc.is_return) {
+			this.calculate_paid_amount();
+		}
+
 		if (this.frm.doc.is_return || this.frm.doc.docstatus > 0 || this.is_internal_invoice()) return;
 
 		frappe.model.round_floats_in(this.frm.doc, ["grand_total", "total_advance", "write_off_amount"]);
@@ -1143,6 +1155,12 @@ hisaabdari.taxes_and_totals = class TaxesAndTotals extends hisaabdari.stock.Stoc
 				this.frm.refresh_field("base_paid_amount");
 			}
 
+			if (this.frm.doc.doctype == "Sales Invoice") {
+				this.set_default_payment(total_amount_to_pay, update_paid_amount);
+				this.calculate_paid_amount();
+			}
+			this.calculate_change_amount();
+
 			var paid_amount =
 				this.frm.doc.party_account_currency == this.frm.doc.currency
 					? this.frm.doc.paid_amount
@@ -1153,6 +1171,167 @@ hisaabdari.taxes_and_totals = class TaxesAndTotals extends hisaabdari.stock.Stoc
 					flt(this.frm.doc.change_amount * this.frm.doc.conversion_rate),
 				precision("outstanding_amount")
 			);
+		}
+	}
+
+	async set_total_amount_to_default_mop() {
+		let grand_total = this.frm.doc.rounded_total || this.frm.doc.grand_total;
+		let base_grand_total = this.frm.doc.base_rounded_total || this.frm.doc.base_grand_total;
+		let total_amount_to_pay;
+
+		if (this.frm.doc.party_account_currency == this.frm.doc.currency) {
+			total_amount_to_pay = flt(
+				grand_total - this.frm.doc.total_advance - this.frm.doc.write_off_amount,
+				precision("grand_total")
+			);
+		} else {
+			total_amount_to_pay = flt(
+				flt(base_grand_total, precision("base_grand_total")) -
+					this.frm.doc.total_advance -
+					this.frm.doc.base_write_off_amount,
+				precision("base_grand_total")
+			);
+		}
+
+		/*
+		During returns, if an user select mode of payment other than
+		default mode of payment, it should retain the user selection
+		instead resetting it to default mode of payment.
+		*/
+
+		let payment_amount = 0;
+		this.frm.doc.payments.forEach((payment) => {
+			payment_amount += payment.amount;
+		});
+
+		if (payment_amount == total_amount_to_pay) {
+			return;
+		}
+
+		/*
+		For partial return, if the payment was made using single mode of payment
+		it should set the return to that mode of payment only.
+		*/
+
+		if (this.frm.doc.return_against) {
+			let { message: return_against_mop } = await frappe.call({
+				method: "hisaabdari.controllers.sales_and_purchase_return.get_payment_data",
+				args: {
+					invoice: this.frm.doc.return_against,
+				},
+			});
+
+			if (return_against_mop.length === 1) {
+				this.frm.doc.payments.forEach((payment) => {
+					if (payment.mode_of_payment == return_against_mop[0].mode_of_payment) {
+						payment.amount = total_amount_to_pay;
+					} else {
+						payment.amount = 0;
+					}
+				});
+				this.frm.refresh_fields();
+				return;
+			}
+		}
+
+		this.frm.doc.payments.find((payment) => {
+			if (payment.default) {
+				payment.amount = total_amount_to_pay;
+			} else {
+				payment.amount = 0;
+			}
+		});
+
+		this.frm.refresh_fields();
+	}
+
+	set_default_payment(total_amount_to_pay, update_paid_amount) {
+		var me = this;
+		var payment_status = true;
+
+		if (
+			this.frm.doc.is_pos &&
+			cint(this.frm.set_default_payment) &&
+			(this.frm.doc["payments"] || []).some((d) => d.default) &&
+			(update_paid_amount === undefined || update_paid_amount)
+		) {
+			$.each(this.frm.doc["payments"] || [], function (index, data) {
+				if (data.default && payment_status && total_amount_to_pay > 0) {
+					let base_amount, amount;
+
+					if (me.frm.doc.party_account_currency == me.frm.doc.currency) {
+						// if customer/supplier currency is same as company currency
+						// total_amount_to_pay is already in customer/supplier currency
+						// so base_amount has to be calculated using total_amount_to_pay
+						base_amount = flt(
+							total_amount_to_pay * me.frm.doc.conversion_rate,
+							precision("base_amount", data)
+						);
+						amount = flt(total_amount_to_pay, precision("amount", data));
+					} else {
+						base_amount = flt(total_amount_to_pay, precision("base_amount", data));
+						amount = flt(
+							total_amount_to_pay / me.frm.doc.conversion_rate,
+							precision("amount", data)
+						);
+					}
+
+					frappe.model.set_value(data.doctype, data.name, "base_amount", base_amount);
+					frappe.model.set_value(data.doctype, data.name, "amount", amount);
+					payment_status = false;
+				} else if (me.frm.doc.paid_amount) {
+					frappe.model.set_value(data.doctype, data.name, "amount", 0.0);
+				}
+			});
+		}
+	}
+
+	calculate_paid_amount() {
+		var me = this;
+		var paid_amount = 0.0;
+		var base_paid_amount = 0.0;
+		if (this.frm.doc.is_pos) {
+			$.each(this.frm.doc["payments"] || [], function (index, data) {
+				data.base_amount = flt(
+					data.amount * me.frm.doc.conversion_rate,
+					precision("base_amount", data)
+				);
+				paid_amount += data.amount;
+				base_paid_amount += data.base_amount;
+			});
+		} else if (!this.frm.doc.is_return) {
+			this.frm.doc.payments = [];
+		}
+
+		this.frm.set_value("paid_amount", flt(paid_amount, precision("paid_amount")));
+		this.frm.set_value("base_paid_amount", flt(base_paid_amount, precision("base_paid_amount")));
+	}
+
+	calculate_change_amount() {
+		this.frm.doc.change_amount = 0.0;
+		this.frm.doc.base_change_amount = 0.0;
+		if (
+			this.frm.doc.doctype == "Sales Invoice" &&
+			this.frm.doc.paid_amount > this.frm.doc.grand_total &&
+			!this.frm.doc.is_return
+		) {
+			var payment_types = $.map(this.frm.doc.payments, function (d) {
+				return d.type;
+			});
+			if (payment_types.includes("Cash")) {
+				var grand_total = this.frm.doc.rounded_total || this.frm.doc.grand_total;
+				var base_grand_total = this.frm.doc.base_rounded_total || this.frm.doc.base_grand_total;
+
+				this.frm.doc.change_amount = flt(
+					this.frm.doc.paid_amount - grand_total,
+					precision("change_amount")
+				);
+
+				this.frm.doc.base_change_amount = flt(
+					this.frm.doc.base_paid_amount - base_grand_total,
+					precision("base_change_amount")
+				);
+			}
 		}
 	}
 

@@ -44,6 +44,7 @@ class TestModeofPayment(ERPNextTestSuite):
 
 	def test_disabled_mode_cannot_be_used_on_transactions(self):
 		from hisaabdari.accounts.doctype.payment_entry.test_payment_entry import create_payment_entry
+		from hisaabdari.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 
 		mode = self.make_mop(accounts=[(COMPANY, "Cash - _TC")]).insert()
 		payment = create_payment_entry()
@@ -63,6 +64,11 @@ class TestModeofPayment(ERPNextTestSuite):
 		mode.save()
 		payment.cancel()
 		self.assertEqual(payment.docstatus, 2)
+
+		invoice = create_sales_invoice(is_pos=1, do_not_save=True)
+		invoice.append("payments", {"mode_of_payment": mode.name, "amount": 100, "account": "Cash - _TC"})
+		with self.assertRaisesRegex(frappe.ValidationError, "Mode of Payment .* is disabled"):
+			invoice.insert()
 
 	def test_account_of_wrong_company_throws(self):
 		other_account = frappe.db.get_value("Account", {"company": "_Test Company 1", "is_group": 0}, "name")

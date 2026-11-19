@@ -55,7 +55,9 @@ frappe.ui.form.on("Stock Settings", {
 		// user_defaults are loaded at boot, so reload to apply the changed setting across forms
 		if (
 			cint(frappe.user_defaults?.enable_serial_and_batch_no_for_item) !==
-			cint(frm.doc.enable_serial_and_batch_no_for_item)
+				cint(frm.doc.enable_serial_and_batch_no_for_item) ||
+			cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt) !==
+				cint(frm.doc.use_delivery_note_and_purchase_receipt)
 		) {
 			window.location.reload();
 		}

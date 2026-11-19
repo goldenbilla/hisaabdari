@@ -208,7 +208,7 @@ class AccountsController(TransactionBase):
 		if not get_meta(self.doctype).has_field("outstanding_amount"):
 			return
 
-		if self.get("is_return") and self.return_against and not self.get("is_paid"):
+		if self.get("is_return") and self.return_against and not (self.get("is_pos") or self.get("is_paid")):
 			against_voucher_outstanding = frappe.get_value(
 				self.doctype, self.return_against, "outstanding_amount"
 			)
@@ -334,7 +334,8 @@ class AccountsController(TransactionBase):
 					)
 				)
 
-			if cint(self.allocate_advances_automatically) and not cint(self.get("is_paid")):
+			pos_check_field = "is_pos" if self.doctype == "Sales Invoice" else "is_paid"
+			if cint(self.allocate_advances_automatically) and not cint(self.get(pos_check_field)):
 				self.set_advances()
 
 			self.set_advance_gain_or_loss()
@@ -689,6 +690,7 @@ class AccountsController(TransactionBase):
 		if (
 			self.is_return
 			or (self.doctype == "Purchase Invoice" and self.is_paid)
+			or (self.doctype == "Sales Invoice" and self.is_pos)
 			or self.get("is_opening") == "Yes"
 		):
 			self.payment_terms_template = ""
@@ -780,8 +782,8 @@ class AccountsController(TransactionBase):
 			)
 
 	def calculate_paid_amount(self):
-		if hasattr(self, "is_paid"):
-			is_paid = self.get("is_paid")
+		if hasattr(self, "is_pos") or hasattr(self, "is_paid"):
+			is_paid = self.get("is_pos") or self.get("is_paid")
 
 			if is_paid:
 				if not self.cash_bank_account:
@@ -1010,7 +1012,7 @@ class AccountsController(TransactionBase):
 				)
 
 	def validate_due_date(self):
-		if self.doctype not in ["Sales Invoice", "Purchase Invoice"]:
+		if self.get("is_pos") or self.doctype not in ["Sales Invoice", "Purchase Invoice"]:
 			return
 
 		from hisaabdari.accounts.party import validate_due_date
@@ -1219,7 +1221,7 @@ class AccountsController(TransactionBase):
 			self.append_taxes_from_master(tax_master_doctype)
 
 	def set_taxes_and_charges(self):
-		if self.get("taxes"):
+		if self.get("taxes") or self.get("is_pos"):
 			return
 
 		# set by the Opening Invoice Creation Tool, where the outstanding amount
@@ -2521,7 +2523,7 @@ class AccountsController(TransactionBase):
 			self.remove(item)
 
 	def set_payment_schedule(self):
-		if self.get("is_opening") == "Yes":
+		if (self.doctype == "Sales Invoice" and self.is_pos) or self.get("is_opening") == "Yes":
 			self.payment_terms_template = ""
 			return
 
@@ -2752,6 +2754,9 @@ class AccountsController(TransactionBase):
 		dates = []
 		li = []
 
+		if self.doctype == "Sales Invoice" and self.is_pos:
+			return
+
 		for d in self.get("payment_schedule"):
 			if not flt(d.discount):
 				d.discount_date = None
@@ -2776,7 +2781,7 @@ class AccountsController(TransactionBase):
 			)
 
 	def validate_payment_schedule_amount(self):
-		if self.get("is_opening") == "Yes":
+		if (self.doctype == "Sales Invoice" and self.is_pos) or self.get("is_opening") == "Yes":
 			return
 
 		if self.get("payment_schedule"):
@@ -3663,7 +3668,11 @@ def update_invoice_status():
 			(invoice.docstatus == 1)
 			& (invoice.outstanding_amount > 0)
 			& (invoice.status.like("Unpaid%") | invoice.status.like("Partly Paid%"))
-			& is_overdue
+			& (
+				((invoice.is_pos & invoice.due_date < today) | is_overdue)
+				if doctype == "Sales Invoice"
+				else is_overdue
+			)
 		)
 
 		frappe.qb.update(invoice).set("status", "Overdue").where(conditions).run()

@@ -48,6 +48,10 @@ from hisaabdari.stock.doctype.purchase_receipt.purchase_receipt import (
 	set_qty_and_amount_net_of_returns,
 	update_billed_amount_based_on_po,
 )
+from hisaabdari.stock.doctype.stock_settings.stock_settings import (
+	set_update_stock_if_delivery_note_and_purchase_receipt_not_used,
+	use_delivery_note_and_purchase_receipt,
+)
 
 
 class WarehouseMissingError(frappe.ValidationError):
@@ -235,6 +239,7 @@ class PurchaseInvoice(BuyingController):
 		return self.on_hold and (not self.release_date or self.release_date > getdate(nowdate()))
 
 	def validate(self):
+		set_update_stock_if_delivery_note_and_purchase_receipt_not_used(self)
 		if not self.is_opening:
 			self.is_opening = "No"
 
@@ -551,7 +556,8 @@ class PurchaseInvoice(BuyingController):
 
 		inventory_account_map = {}
 		if self.update_stock:
-			self.validate_item_code()
+			if use_delivery_note_and_purchase_receipt():
+				self.validate_item_code()
 			self.validate_warehouse(for_validate)
 			if auto_accounting_for_stock:
 				inventory_account_map = self.get_inventory_account_map()

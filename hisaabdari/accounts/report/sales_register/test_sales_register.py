@@ -387,3 +387,42 @@ class TestItemWiseSalesRegister(ERPNextTestSuite, AccountsTestMixin):
 		self.assertEqual(data_by_name.get(foreign_invoice.name), flt((100.236 * 80), outstanding_precision))
 		self.assertEqual(data_by_name.get(local_invoice.name), flt(200.456, outstanding_precision))
 		self.assertEqual(data_by_name.get(foreign_invoice_on_local_receivable.name), 800)
+
+	def test_ledger_view_nets_pos_paid_invoice(self):
+		# A POS payment settles the receivable inside the invoice, so the ledger view must credit it
+		# and net to zero instead of showing a phantom outstanding.
+		si = create_sales_invoice(
+			item=self.item,
+			company=self.company,
+			customer=self.customer,
+			debit_to=self.debit_to,
+			posting_date=today(),
+			parent_cost_center=self.cost_center,
+			cost_center=self.cost_center,
+			rate=100,
+			price_list_rate=100,
+			do_not_save=1,
+		)
+		si.is_pos = 1
+		si.append("payments", {"mode_of_payment": "Cash", "amount": 100})
+		si = si.save().submit()
+		self.assertEqual(flt(si.outstanding_amount), 0.0)
+
+		filters = frappe._dict(
+			{
+				"from_date": today(),
+				"to_date": today(),
+				"company": self.company,
+				"include_payments": True,
+				"customer": self.customer,
+			}
+		)
+		rows = execute(filters)[1]
+		inv_row = next(x for x in rows if x.get("voucher_no") == si.name)
+
+		self.assertEqual(flt(inv_row.get("debit")), 100.0)
+		self.assertEqual(flt(inv_row.get("credit")), 100.0)
+
+		# running balance is unchanged by a fully-paid POS invoice
+		idx = rows.index(inv_row)
+		self.assertEqual(flt(inv_row.get("balance")), flt(rows[idx - 1].get("balance")))

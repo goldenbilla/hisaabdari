@@ -14,6 +14,16 @@ class TestStockSettings(ERPNextTestSuite):
 		super().setUp()
 		frappe.db.set_single_value("Stock Settings", "clean_description_html", 0)
 
+	def test_default_valuation_method_is_moving_average(self):
+		self.assertEqual(frappe.new_doc("Stock Settings").valuation_method, "Moving Average")
+		# the test site overrides the Company default with a Property Setter, so read the shipped one
+		self.assertEqual(
+			frappe.db.get_value(
+				"DocField", {"parent": "Company", "fieldname": "valuation_method"}, "default"
+			),
+			"Moving Average",
+		)
+
 	def test_settings(self):
 		item = frappe.get_doc(
 			doctype="Item",

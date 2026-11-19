@@ -10,6 +10,7 @@ from frappe.query_builder.functions import Sum
 from frappe.utils import cint, flt, getdate
 
 from hisaabdari.stock.doctype.item.item import get_last_purchase_details, validate_end_of_life
+from hisaabdari.stock.doctype.stock_settings.stock_settings import use_delivery_note_and_purchase_receipt
 
 
 def update_last_purchase_rate(doc, is_submit) -> None:
@@ -53,6 +54,9 @@ def update_last_purchase_rate(doc, is_submit) -> None:
 
 def validate_for_items(doc) -> None:
 	for d in doc.get("items"):
+		if not d.item_code and not use_delivery_note_and_purchase_receipt():
+			continue
+
 		set_stock_levels(row=d)  # update with latest quantities
 		item = validate_item_and_get_basic_data(row=d)
 		validate_stock_item_warehouse(row=d, item=item)

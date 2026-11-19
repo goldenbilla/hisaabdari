@@ -50,7 +50,7 @@ from hisaabdari.controllers.accounts_controller import (
 	validate_taxes_and_charges,
 )
 from hisaabdari.controllers.queries import has_ignored_field
-from hisaabdari.setup.utils import get_exchange_rate
+from hisaabdari.setup.utils import get_exchange_rate, throw_exchange_rate_not_found
 
 
 class InvalidPaymentEntry(ValidationError):
@@ -616,6 +616,10 @@ class PaymentEntry(AccountsController):
 				self.source_exchange_rate = get_exchange_rate(
 					self.paid_from_account_currency, self.company_currency, self.posting_date
 				)
+				if not self.source_exchange_rate:
+					throw_exchange_rate_not_found(
+						self.paid_from_account_currency, self.company_currency, self.posting_date
+					)
 
 	def set_target_exchange_rate(self, ref_doc=None):
 		if self.paid_from_account_currency == self.paid_to_account_currency:
@@ -628,6 +632,10 @@ class PaymentEntry(AccountsController):
 				self.target_exchange_rate = get_exchange_rate(
 					self.paid_to_account_currency, self.company_currency, self.posting_date
 				)
+				if not self.target_exchange_rate:
+					throw_exchange_rate_not_found(
+						self.paid_to_account_currency, self.company_currency, self.posting_date
+					)
 
 	def validate_mandatory(self):
 		for field in ("paid_amount", "received_amount", "source_exchange_rate", "target_exchange_rate"):
@@ -3015,6 +3023,8 @@ def set_paid_amount_and_received_amount(
 			if bank and company_currency != bank.account_currency:
 				# doc currency can be different from bank currency
 				conversion_rate = get_exchange_rate(bank.account_currency, party_account_currency)
+				if not conversion_rate:
+					throw_exchange_rate_not_found(bank.account_currency, party_account_currency)
 				received_amount = paid_amount / conversion_rate
 			else:
 				conversion_rate = get_exchange_rate(doc.get("currency", company_currency), company_currency)

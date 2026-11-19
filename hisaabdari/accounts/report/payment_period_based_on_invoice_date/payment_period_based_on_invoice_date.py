@@ -208,14 +208,17 @@ def get_entries(filters):
 
 
 def get_paid_invoice_entries(filters) -> list[dict]:
-	"""Payments recorded on the invoice itself: paid purchase invoices."""
+	"""Payments recorded on the invoice itself: paid sales invoices and paid purchase invoices."""
 	if filters.payment_type == _("Outgoing"):
 		doctype, party_type = "Purchase Invoice", "Supplier"
 		invoice = qb.DocType(doctype)
 		party, paid_amount = invoice.supplier, invoice.base_paid_amount
 		conditions = [invoice.is_paid.eq(1)]
 	else:
-		return []
+		doctype, party_type = "Sales Invoice", "Customer"
+		invoice = qb.DocType(doctype)
+		party, paid_amount = invoice.customer, invoice.base_paid_amount - invoice.base_change_amount
+		conditions = [invoice.is_pos.eq(1)]
 
 	conditions += [invoice.docstatus.eq(1), invoice.company.eq(filters.get("company")), paid_amount.ne(0)]
 	if filters.party:

@@ -13,7 +13,7 @@ from frappe.utils import flt, get_link_to_form, nowdate
 import hisaabdari
 from hisaabdari.accounts.doctype.journal_entry.journal_entry import get_balance_on
 from hisaabdari.accounts.utils import get_currency_precision
-from hisaabdari.setup.utils import get_exchange_rate
+from hisaabdari.setup.utils import get_exchange_rate, throw_exchange_rate_not_found
 
 
 class ExchangeRateRevaluation(Document):
@@ -41,7 +41,15 @@ class ExchangeRateRevaluation(Document):
 
 	def validate(self):
 		self.validate_rounding_loss_allowance()
+		self.validate_new_exchange_rate()
 		self.set_total_gain_loss()
+
+	def validate_new_exchange_rate(self):
+		for d in self.accounts:
+			if not d.zero_balance and flt(d.balance_in_account_currency) and not flt(d.new_exchange_rate):
+				throw_exchange_rate_not_found(
+					d.account_currency, hisaabdari.get_company_currency(self.company), self.posting_date
+				)
 
 	def validate_rounding_loss_allowance(self):
 		if self.rounding_loss_allowance < 0 or self.rounding_loss_allowance >= 1:

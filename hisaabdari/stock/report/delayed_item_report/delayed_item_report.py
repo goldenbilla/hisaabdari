@@ -62,7 +62,7 @@ class DelayedItemReport:
 		)
 
 		if doctype == "Sales Invoice":
-			query = query.where(parent.update_stock == 1)
+			query = query.where((parent.update_stock == 1) & (parent.is_pos == 0))
 
 		if item_group := self.filters.get("item_group"):
 			query = query.where(child.item_group.isin(get_group_and_descendants("Item Group", item_group)))

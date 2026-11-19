@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "defaults_tab",
+  "use_delivery_note_and_purchase_receipt",
   "item_defaults_section",
   "item_naming_by",
   "naming_series_details",
@@ -70,6 +71,13 @@
  ],
  "fields": [
   {
+   "default": "0",
+   "description": "Turn this on only if goods are handed over or received on a separate Delivery Note or Purchase Receipt; when it is off, every Sales Invoice and Purchase Invoice moves the stock itself.",
+   "fieldname": "use_delivery_note_and_purchase_receipt",
+   "fieldtype": "Check",
+   "label": "Use Delivery Notes and Purchase Receipts"
+  },
+  {
    "default": "Item Code",
    "fieldname": "item_naming_by",
    "fieldtype": "Select",
@@ -97,6 +105,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "Moving Average",
    "documentation_url": "https://docs.erpnext.com/docs/v14/user/manual/en/stock/articles/calculation-of-valuation-rate-in-fifo-and-moving-average",
    "fieldname": "valuation_method",
    "fieldtype": "Select",
@@ -459,7 +468,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-19 12:00:00.000000",
+ "modified": "2026-11-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Stock Settings",

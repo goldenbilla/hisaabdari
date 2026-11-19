@@ -846,7 +846,7 @@
    "label": "Enable Item-wise Inventory Account"
   },
   {
-   "default": "FIFO",
+   "default": "Moving Average",
    "fieldname": "valuation_method",
    "fieldtype": "Select",
    "label": "Default Stock Valuation Method",
@@ -891,7 +891,7 @@
  "image_field": "company_logo",
  "is_tree": 1,
  "links": [],
- "modified": "2026-09-16 11:42:07.000000",
+ "modified": "2026-11-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Setup",
  "name": "Company",

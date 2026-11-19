@@ -8,6 +8,11 @@ from frappe.utils import cint
 
 import hisaabdari.accounts.utils
 from hisaabdari.stock.doctype.price_list.price_list import is_price_list_enabled
+from hisaabdari.stock.doctype.stock_settings.stock_settings import (
+	DELIVERY_AND_RECEIPT_DOCTYPES,
+	DELIVERY_AND_RECEIPT_REPORTS,
+	use_delivery_note_and_purchase_receipt,
+)
 
 
 def boot_session(bootinfo):
@@ -39,6 +44,10 @@ def boot_session(bootinfo):
 		bootinfo.sysdefaults.pick_serial_and_batch_based_on = frappe.get_single_value(
 			"Stock Settings", "pick_serial_and_batch_based_on"
 		)
+
+		bootinfo.sysdefaults.use_delivery_note_and_purchase_receipt = use_delivery_note_and_purchase_receipt()
+		if not bootinfo.sysdefaults.use_delivery_note_and_purchase_receipt:
+			hide_delivery_note_and_purchase_receipt(bootinfo)
 
 		remove_disabled_price_list_defaults(bootinfo)
 
@@ -92,6 +101,54 @@ def remove_disabled_price_list_defaults(bootinfo):
 
 		bootinfo.sysdefaults.pop(key, None)
 		user_defaults.pop(key, None)
+
+
+def hide_delivery_note_and_purchase_receipt(bootinfo):
+	"""Take the two doctypes and their reports out of the sidebars, the search bar and the "new" lists.
+
+	Only what the browser shows changes: `can_read` and the server-side permissions are untouched,
+	so existing documents still open and code can still create them.
+	"""
+	hidden = DELIVERY_AND_RECEIPT_DOCTYPES + DELIVERY_AND_RECEIPT_REPORTS
+
+	user = bootinfo.get("user") or {}
+	for key in ("can_create", "can_search"):
+		if user.get(key):
+			user[key] = [d for d in user[key] if d not in DELIVERY_AND_RECEIPT_DOCTYPES]
+
+	if bootinfo.get("allowed_reports"):
+		bootinfo.allowed_reports = {
+			name: report
+			for name, report in bootinfo.allowed_reports.items()
+			if name not in DELIVERY_AND_RECEIPT_REPORTS
+		}
+
+	for sidebar in (bootinfo.get("module_sidebars") or {}).values():
+		sidebar["items"] = [d for d in sidebar.get("items") or [] if d.get("link_to") not in hidden]
+
+
+@frappe.whitelist()
+@frappe.read_only()
+def get_desktop_page(page: str):
+	"""`frappe.desk.desktop.get_desktop_page`, without the links hidden by Stock Settings."""
+	from frappe.desk.desktop import get_desktop_page
+
+	workspace = get_desktop_page(page)
+	if not workspace or use_delivery_note_and_purchase_receipt():
+		return workspace
+
+	hidden = DELIVERY_AND_RECEIPT_DOCTYPES + DELIVERY_AND_RECEIPT_REPORTS
+
+	cards = workspace["cards"]["items"]
+	for card in cards:
+		card["links"] = [d for d in card.get("links") or [] if d.get("link_to") not in hidden]
+	workspace["cards"]["items"] = [card for card in cards if card["links"]]
+
+	workspace["shortcuts"]["items"] = [
+		d for d in workspace["shortcuts"]["items"] if d.get("link_to") not in hidden
+	]
+
+	return workspace
 
 
 def update_page_info(bootinfo):

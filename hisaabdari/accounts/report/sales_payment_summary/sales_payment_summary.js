@@ -32,6 +32,11 @@ frappe.query_reports["Sales Payment Summary"] = {
 			options: "User",
 		},
 		{
+			fieldname: "is_pos",
+			label: __("Show only invoices paid on the spot"),
+			fieldtype: "Check",
+		},
+		{
 			fieldname: "payment_detail",
 			label: __("Show Payment Details"),
 			fieldtype: "Check",

@@ -131,6 +131,21 @@ class TestPaymentPeriodBasedOnInvoiceDate(ERPNextTestSuite):
 			[(row["payment_entry"], row["amount"]) for row in data], [(payment.name, payment.paid_amount)]
 		)
 
+	def test_cash_invoice_payments_are_listed(self):
+		invoice = create_sales_invoice(
+			customer="_Test Customer", rate=1000, posting_date="2026-06-01", do_not_save=True
+		)
+		invoice.is_pos = 1
+		invoice.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 1000})
+		invoice.submit()
+
+		_columns, data = self.run_report(party="_Test Customer")
+
+		self.assertEqual(
+			[(row["payment_entry"], row["invoice"], row["amount"]) for row in data],
+			[(invoice.name, invoice.name, 1000)],
+		)
+
 	def test_user_sees_payments_of_permitted_customers_only(self):
 		self.pay_invoices_of_two_customers()
 		user = self.create_user_with_customer_permission("_Test Customer")

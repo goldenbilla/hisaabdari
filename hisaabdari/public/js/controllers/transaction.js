@@ -359,7 +359,12 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 			!this.frm.doc.__onload?.load_after_mapping
 		) {
 			frappe.after_ajax(() => this.apply_default_taxes());
-		} else if (this.frm.doc.__islocal && this.frm.doc.company && this.frm.doc["items"]) {
+		} else if (
+			this.frm.doc.__islocal &&
+			this.frm.doc.company &&
+			this.frm.doc["items"] &&
+			!this.frm.doc.is_pos
+		) {
 			frappe.after_ajax(() => this.calculate_taxes_and_totals());
 		}
 		if (frappe.meta.get_docfield(this.frm.doc.doctype + " Item", "item_code")) {
@@ -1139,6 +1144,7 @@ hisaabdari.TransactionController = class TransactionController extends hisaabdar
 		if (
 			doc.due_date &&
 			!this.frm.updating_party_details &&
+			!doc.is_pos &&
 			(doc.payment_terms_template || doc.payment_schedule?.length)
 		) {
 			const to_clear = [];

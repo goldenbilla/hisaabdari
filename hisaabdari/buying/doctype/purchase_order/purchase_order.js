@@ -195,7 +195,8 @@ hisaabdari.buying.PurchaseOrderController = class PurchaseOrderController extend
 						doc.items
 							.filter((item) => !item.delivered_by_supplier)
 							.some((item) => item.received_qty < item.qty) &&
-						allow_receipt
+						allow_receipt &&
+						cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt)
 					) {
 						this.frm.add_custom_button(
 							__("Purchase Receipt"),

@@ -188,6 +188,10 @@ hisaabdari.accounts.PurchaseInvoice = class PurchaseInvoice extends hisaabdari.b
 				__("Get Items From")
 			);
 
+			if (!cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt)) {
+				this.frm.remove_custom_button(__("Purchase Receipt"), __("Get Items From"));
+			}
+
 			if (!this.frm.doc.is_return) {
 				frappe.db.get_single_value("Buying Settings", "maintain_same_rate").then((value) => {
 					if (value) {
@@ -628,7 +632,12 @@ frappe.ui.form.on("Purchase Invoice", {
 
 	update_stock: function (frm) {
 		hide_fields(frm);
-		frm.fields_dict.items.grid.toggle_reqd("item_code", frm.doc.update_stock ? true : false);
+		frm.fields_dict.items.grid.toggle_reqd(
+			"item_code",
+			frm.doc.update_stock && cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt)
+				? true
+				: false
+		);
 	},
 
 	make_purchase_receipt: function (frm) {
@@ -653,5 +662,26 @@ frappe.ui.form.on("Purchase Invoice", {
 				},
 			});
 		}
+	},
+});
+
+// When Delivery Notes and Purchase Receipts are not used, the invoice itself moves the stock.
+frappe.ui.form.on("Purchase Invoice", {
+	refresh: function (frm) {
+		if (cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt)) return;
+
+		frm.toggle_display("update_stock", false);
+		if (frm.is_new() && !cint(frm.doc.update_stock) && frm.doc.is_opening != "Yes") {
+			frm.trigger("is_opening");
+		}
+	},
+
+	is_opening: function (frm) {
+		if (cint(frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt)) return;
+		if (frm.doc.docstatus != 0 || (frm.doc.is_return && frm.doc.return_against)) return;
+		if ((frm.doc.items || []).some((d) => d.purchase_receipt || d.delivered_by_supplier)) return;
+
+		const update_stock = frm.doc.is_opening == "Yes" ? 0 : 1;
+		if (cint(frm.doc.update_stock) != update_stock) frm.set_value("update_stock", update_stock);
 	},
 });

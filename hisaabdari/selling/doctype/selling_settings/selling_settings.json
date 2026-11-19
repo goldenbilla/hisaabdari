@@ -91,6 +91,7 @@
    "options": "No\nYes"
   },
   {
+   "depends_on": "eval:frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt",
    "fieldname": "dn_required",
    "fieldtype": "Select",
    "label": "Is Delivery Note required to create Sales Invoice?",
@@ -211,6 +212,7 @@
   },
   {
    "default": "0",
+   "depends_on": "eval:frappe.boot.sysdefaults.use_delivery_note_and_purchase_receipt",
    "description": "When enabled, it adds a cutoff date filter to Delivery Notes created in bulk from Sales Orders. This allows you to process orders only with a transaction date up to the specified cutoff date, which is useful for period-end processing and batch fulfillment.",
    "fieldname": "enable_cutoff_date_on_bulk_delivery_note_creation",
    "fieldtype": "Check",
@@ -341,7 +343,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-09-23 12:00:00.000000",
+ "modified": "2026-11-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Selling Settings",

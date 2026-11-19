@@ -65,6 +65,15 @@ never_skip_patches = ['hisaabdari.patches.v16_0.update_serial_batch_entries']
 
 boot_session = 'hisaabdari.startup.boot.boot_session'
 
+override_whitelisted_methods = {'frappe.desk.desktop.get_desktop_page': 'hisaabdari.startup.boot.get_desktop_page'}
+
+override_doctype_dashboards = {
+    doctype: ['hisaabdari.stock.doctype.stock_settings.stock_settings.hide_delivery_note_and_purchase_receipt_in_dashboard']
+    for doctype in ('Sales Order', 'Sales Invoice', 'Purchase Order', 'Purchase Invoice', 'Customer', 'Supplier',
+                    'Company', 'Item', 'Batch', 'Item Tax Template', 'Sales Taxes and Charges Template',
+                    'Purchase Taxes and Charges Template')
+}
+
 notification_config = 'hisaabdari.startup.notifications.get_notification_config'
 
 get_help_messages = 'hisaabdari.utilities.activation.get_help_messages'
