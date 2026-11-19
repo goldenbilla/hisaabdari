@@ -36,8 +36,8 @@
             {% if entries.credit == 0.0 %}
             <tr>
                 <td class="right top-bottom">{{ entries.account }}</td>
-                <td class="right left top-bottom">{{ entries.party_type }}</td>
-                <td class="right left top-bottom">{{ entries.party }}</td>
+                <td class="right left top-bottom">{{ entries.party_type or "" }}</td>
+                <td class="right left top-bottom">{{ entries.party or "" }}</td>
                 <td class="left top-bottom">{{ entries.debit }}</td>
             </tr>
             {% endif %}
@@ -53,8 +53,8 @@
             {% if entries.debit == 0.0 %}
             <tr>
                 <td class="right top-bottom">{{ entries.account }}</td>
-                <td class="right left top-bottom">{{ entries.party_type }}</td>
-                <td class="right left top-bottom">{{ entries.party }}</td>
+                <td class="right left top-bottom">{{ entries.party_type or "" }}</td>
+                <td class="right left top-bottom">{{ entries.party or "" }}</td>
                 <td class="left top-bottom">{{ entries.credit }}</td>
             </tr>
             {% endif %}

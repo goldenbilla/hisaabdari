@@ -11,7 +11,6 @@
  "field_order": [
   "stock_entry_details_tab",
   "company",
-  "naming_series",
   "stock_entry_type",
   "purpose",
   "col2",
@@ -46,7 +45,6 @@
   "total_additional_costs",
   "accounting_dimensions_section",
   "dimension_col_break",
-  "cost_center",
   "other_info_tab",
   "printing_settings",
   "select_print_heading",
@@ -60,26 +58,33 @@
   "more_info",
   "is_opening",
   "remarks",
+  "cost_center",
   "col5",
   "per_transferred",
   "total_amount",
   "amended_from",
+  "naming_series",
   "credit_note",
   "is_return",
   "tab_connections"
  ],
  "fields": [
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "no_copy": 1,
-   "oldfieldname": "naming_series",
-   "oldfieldtype": "Select",
-   "options": "MAT-STE-.YYYY.-",
+   "fieldname": "stock_entry_details_tab",
+   "fieldtype": "Tab Break",
+   "label": "Details",
+   "oldfieldtype": "Section Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "oldfieldname": "company",
+   "oldfieldtype": "Link",
+   "options": "Company",
    "print_hide": 1,
-   "reqd": 1,
-   "set_only_once": 1
+   "remember_last_selected_value": 1,
+   "reqd": 1
   },
   {
    "fieldname": "stock_entry_type",
@@ -90,14 +95,6 @@
    "options": "Stock Entry Type",
    "reqd": 1,
    "search_index": 1
-  },
-  {
-   "depends_on": "eval:doc.purpose == 'Material Transfer'",
-   "fieldname": "outgoing_stock_entry",
-   "fieldtype": "Link",
-   "label": "Stock Entry (Outward GIT)",
-   "options": "Stock Entry",
-   "read_only": 1
   },
   {
    "bold": 1,
@@ -114,58 +111,20 @@
    "search_index": 1
   },
   {
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "label": "Company",
-   "oldfieldname": "company",
-   "oldfieldtype": "Link",
-   "options": "Company",
-   "print_hide": 1,
-   "remember_last_selected_value": 1,
-   "reqd": 1
-  },
-  {
-   "depends_on": "eval:doc.purpose==\"Sales Return\"",
-   "fieldname": "delivery_note_no",
-   "fieldtype": "Link",
-   "label": "Delivery Note No",
-   "no_copy": 1,
-   "oldfieldname": "delivery_note_no",
-   "oldfieldtype": "Link",
-   "options": "Delivery Note",
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
-  },
-  {
-   "depends_on": "eval:doc.purpose==\"Sales Return\"",
-   "fieldname": "sales_invoice_no",
-   "fieldtype": "Link",
-   "label": "Sales Invoice No",
-   "no_copy": 1,
-   "options": "Sales Invoice",
-   "print_hide": 1,
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.purpose==\"Purchase Return\"",
-   "fieldname": "purchase_receipt_no",
-   "fieldtype": "Link",
-   "label": "Purchase Receipt No",
-   "no_copy": 1,
-   "oldfieldname": "purchase_receipt_no",
-   "oldfieldtype": "Link",
-   "options": "Purchase Receipt",
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
-  },
-  {
    "fieldname": "col2",
    "fieldtype": "Column Break",
    "oldfieldtype": "Column Break",
    "print_width": "50%",
    "width": "50%"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.docstatus==0",
+   "fieldname": "set_posting_time",
+   "fieldtype": "Check",
+   "in_import_template": 1,
+   "label": "Edit Posting Date and Time",
+   "print_hide": 1
   },
   {
    "default": "Today",
@@ -189,13 +148,36 @@
    "print_hide": 1
   },
   {
+   "fieldname": "reference_section",
+   "fieldtype": "Section Break"
+  },
+  {
    "default": "0",
-   "depends_on": "eval:doc.docstatus==0",
-   "fieldname": "set_posting_time",
+   "depends_on": "eval: doc.purpose=='Material Transfer' && !doc.outgoing_stock_entry",
+   "fetch_from": "stock_entry_type.add_to_transit",
+   "fetch_if_empty": 1,
+   "fieldname": "add_to_transit",
    "fieldtype": "Check",
-   "in_import_template": 1,
-   "label": "Edit Posting Date and Time",
-   "print_hide": 1
+   "label": "Add to Transit",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_jabv",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.purpose == 'Material Transfer'",
+   "fieldname": "outgoing_stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry (Outward GIT)",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_jwgn",
+   "fieldtype": "Section Break",
+   "label": "Default Warehouse"
   },
   {
    "description": "Sets 'Source Warehouse' in each row of the items table.",
@@ -267,6 +249,18 @@
    "options": "Barcode"
   },
   {
+   "depends_on": "eval: doc.last_scanned_warehouse",
+   "fieldname": "last_scanned_warehouse",
+   "fieldtype": "Data",
+   "is_virtual": 1,
+   "label": "Last Scanned Warehouse"
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
    "allow_bulk_edit": 1,
    "fieldname": "items",
    "fieldtype": "Table",
@@ -290,9 +284,9 @@
    "print_hide": 1
   },
   {
-   "fieldname": "total_incoming_value",
+   "fieldname": "total_outgoing_value",
    "fieldtype": "Currency",
-   "label": "Total Incoming Value (Receipt)",
+   "label": "Total Outgoing Value (Consumption)",
    "options": "Company:company:default_currency",
    "print_hide": 1,
    "read_only": 1
@@ -302,9 +296,9 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "total_outgoing_value",
+   "fieldname": "total_incoming_value",
    "fieldtype": "Currency",
-   "label": "Total Outgoing Value (Consumption)",
+   "label": "Total Incoming Value (Receipt)",
    "options": "Company:company:default_currency",
    "print_hide": 1,
    "read_only": 1
@@ -340,6 +334,22 @@
   },
   {
    "collapsible": 1,
+   "fieldname": "accounting_dimensions_section",
+   "fieldtype": "Tab Break",
+   "hidden": 1,
+   "label": "Accounting Dimensions"
+  },
+  {
+   "fieldname": "dimension_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "other_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "Other Info"
+  },
+  {
+   "collapsible": 1,
    "fieldname": "printing_settings",
    "fieldtype": "Section Break",
    "label": "Printing Settings"
@@ -348,16 +358,66 @@
    "allow_on_submit": 1,
    "fieldname": "select_print_heading",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Print Heading",
    "oldfieldname": "select_print_heading",
    "oldfieldtype": "Link",
    "options": "Print Heading"
   },
   {
+   "fieldname": "print_settings_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "letter_head",
    "fieldtype": "Link",
    "label": "Letter Head",
    "options": "Letter Head"
+  },
+  {
+   "fieldname": "reference_details_section",
+   "fieldtype": "Section Break",
+   "label": "Reference"
+  },
+  {
+   "depends_on": "eval:doc.purpose==\"Sales Return\"",
+   "fieldname": "delivery_note_no",
+   "fieldtype": "Link",
+   "label": "Delivery Note No",
+   "no_copy": 1,
+   "oldfieldname": "delivery_note_no",
+   "oldfieldtype": "Link",
+   "options": "Delivery Note",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "depends_on": "eval:doc.purpose==\"Sales Return\"",
+   "fieldname": "sales_invoice_no",
+   "fieldtype": "Link",
+   "label": "Sales Invoice No",
+   "no_copy": 1,
+   "options": "Sales Invoice",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_qpvo",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.purpose==\"Purchase Return\"",
+   "fieldname": "purchase_receipt_no",
+   "fieldtype": "Link",
+   "label": "Purchase Receipt No",
+   "no_copy": 1,
+   "oldfieldname": "purchase_receipt_no",
+   "oldfieldtype": "Link",
+   "options": "Purchase Receipt",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "collapsible": 1,
@@ -380,6 +440,12 @@
    "oldfieldname": "remarks",
    "oldfieldtype": "Text",
    "print_hide": 1
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
   },
   {
    "fieldname": "col5",
@@ -418,31 +484,23 @@
    "read_only": 1
   },
   {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "no_copy": 1,
+   "oldfieldname": "naming_series",
+   "oldfieldtype": "Select",
+   "options": "MAT-STE-.YYYY.-",
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
    "fieldname": "credit_note",
    "fieldtype": "Link",
    "hidden": 1,
    "label": "Credit Note",
    "options": "Journal Entry"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "accounting_dimensions_section",
-   "fieldtype": "Tab Break",
-   "label": "Accounting Dimensions"
-  },
-  {
-   "fieldname": "print_settings_col_break",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval: doc.purpose=='Material Transfer' && !doc.outgoing_stock_entry",
-   "fetch_from": "stock_entry_type.add_to_transit",
-   "fetch_if_empty": 1,
-   "fieldname": "add_to_transit",
-   "fieldtype": "Check",
-   "label": "Add to Transit",
-   "no_copy": 1
   },
   {
    "default": "0",
@@ -456,66 +514,10 @@
    "read_only": 1
   },
   {
-   "collapsible": 1,
-   "fieldname": "section_break_jwgn",
-   "fieldtype": "Section Break",
-   "label": "Default Warehouse"
-  },
-  {
-   "fieldname": "other_info_tab",
-   "fieldtype": "Tab Break",
-   "label": "Other Info"
-  },
-  {
-   "fieldname": "stock_entry_details_tab",
-   "fieldtype": "Tab Break",
-   "label": "Details",
-   "oldfieldtype": "Section Break"
-  },
-  {
-   "fieldname": "items_section",
-   "fieldtype": "Section Break",
-   "label": "Items"
-  },
-  {
    "fieldname": "tab_connections",
    "fieldtype": "Tab Break",
    "label": "Connections",
    "show_dashboard": 1
-  },
-  {
-   "depends_on": "eval: doc.last_scanned_warehouse",
-   "fieldname": "last_scanned_warehouse",
-   "fieldtype": "Data",
-   "is_virtual": 1,
-   "label": "Last Scanned Warehouse"
-  },
-  {
-   "fieldname": "reference_section",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "column_break_jabv",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "reference_details_section",
-   "fieldtype": "Section Break",
-   "label": "Reference"
-  },
-  {
-   "fieldname": "column_break_qpvo",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "dimension_col_break",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "cost_center",
-   "fieldtype": "Link",
-   "label": "Cost Center",
-   "options": "Cost Center"
   }
  ],
  "grid_page_length": 50,

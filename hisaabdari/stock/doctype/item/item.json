@@ -110,6 +110,13 @@
  ],
  "fields": [
   {
+   "fieldname": "details",
+   "fieldtype": "Tab Break",
+   "label": "Details",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-flag"
+  },
+  {
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Series",
@@ -164,6 +171,15 @@
    "reqd": 1
   },
   {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "hidden": 1,
+   "in_preview": 1,
+   "label": "Image",
+   "options": "image",
+   "print_hide": 1
+  },
+  {
    "fieldname": "column_break0",
    "fieldtype": "Column Break"
   },
@@ -190,19 +206,47 @@
    "oldfieldtype": "Select"
   },
   {
-   "bold": 1,
-   "fieldname": "opening_stock",
-   "fieldtype": "Float",
-   "hidden": 1,
-   "label": "Opening Stock"
+   "fieldname": "section_break_zlmj",
+   "fieldtype": "Section Break",
+   "label": "Item Attributes"
   },
   {
-   "depends_on": "is_stock_item",
-   "fieldname": "valuation_rate",
-   "fieldtype": "Currency",
+   "default": "1",
+   "description": "Allow this item to be used in sales transactions.",
+   "fieldname": "is_sales_item",
+   "fieldtype": "Check",
    "in_import_template": 1,
-   "label": "Valuation Rate",
-   "non_negative": 1
+   "in_list_view": 1,
+   "label": "Allow Sales",
+   "show_description_on_click": 1
+  },
+  {
+   "fieldname": "column_break_kpmi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Allow this item to be used in purchase transactions.",
+   "fieldname": "is_purchase_item",
+   "fieldtype": "Check",
+   "in_import_template": 1,
+   "label": "Allow Purchase",
+   "read_only_depends_on": "eval: doc.is_customer_provided_item",
+   "show_description_on_click": 1
+  },
+  {
+   "default": "0",
+   "description": "Enable if this item is provided by a customer and received via Stock Entry.",
+   "fieldname": "is_customer_provided_item",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Is Customer Provided Item",
+   "read_only_depends_on": "eval: doc.is_purchase_item",
+   "show_description_on_click": 1
+  },
+  {
+   "fieldname": "section_break_gjns",
+   "fieldtype": "Section Break"
   },
   {
    "bold": 1,
@@ -214,13 +258,65 @@
    "label": "Standard Selling Rate"
   },
   {
-   "fieldname": "image",
-   "fieldtype": "Attach Image",
+   "fieldname": "column_break_ixrh",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "fieldname": "opening_stock",
+   "fieldtype": "Float",
    "hidden": 1,
-   "in_preview": 1,
-   "label": "Image",
-   "options": "image",
-   "print_hide": 1
+   "label": "Opening Stock"
+  },
+  {
+   "fieldname": "section_break_znra",
+   "fieldtype": "Section Break"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "description": "Percentage by which over-delivery or over-receipt is allowed against a Sales/Purchase Order for this item. If not set, value from Stock Settings will be used.",
+   "fieldname": "over_delivery_receipt_allowance",
+   "fieldtype": "Float",
+   "label": "Over Delivery/Receipt Allowance (%)",
+   "non_negative": 1,
+   "oldfieldname": "tolerance",
+   "oldfieldtype": "Currency"
+  },
+  {
+   "fieldname": "column_break_wugd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "description": "Percentage by which over-billing is allowed against a Sales/Purchase Order for this item. If not set, value from Accounts Settings will be used.",
+   "fieldname": "over_billing_allowance",
+   "fieldtype": "Float",
+   "label": "Over Billing Allowance (%)",
+   "non_negative": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "company_restrictions_section",
+   "fieldtype": "Section Break",
+   "label": "Company Restrictions",
+   "permlevel": 1
+  },
+  {
+   "default": "0",
+   "description": "If checked, this Item is only available for transactions in the companies listed below.",
+   "fieldname": "restrict_to_companies",
+   "fieldtype": "Check",
+   "label": "Restrict to Companies",
+   "permlevel": 1
+  },
+  {
+   "depends_on": "eval:doc.restrict_to_companies",
+   "fieldname": "allowed_companies",
+   "fieldtype": "Table MultiSelect",
+   "label": "Allowed Companies",
+   "mandatory_depends_on": "eval:doc.restrict_to_companies",
+   "options": "Company Restriction",
+   "permlevel": 1
   },
   {
    "collapsible": 1,
@@ -238,15 +334,72 @@
    "oldfieldtype": "Text"
   },
   {
-   "fieldname": "sb_barcodes",
-   "fieldtype": "Section Break",
-   "label": "Barcodes"
+   "fieldname": "accounting",
+   "fieldtype": "Tab Break",
+   "label": "Accounting"
   },
   {
-   "fieldname": "barcodes",
+   "fieldname": "section_break_wfkx",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "item_defaults",
    "fieldtype": "Table",
-   "label": "Barcodes",
-   "options": "Item Barcode"
+   "label": "Item Defaults",
+   "options": "Item Default"
+  },
+  {
+   "fieldname": "uom_tab",
+   "fieldtype": "Tab Break",
+   "label": "UOM"
+  },
+  {
+   "fieldname": "unit_of_measure_conversion",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "uom_conversion_details_column",
+   "fieldtype": "Column Break",
+   "label": "UOM Conversion Details"
+  },
+  {
+   "fieldname": "uom_help_html",
+   "fieldtype": "HTML",
+   "options": "<div style=\"margin-bottom:10px; color: var(--gray-500) !important;\">Define alternate units for this item. Eg: 1 Box = 12 Nos, set conversion factor as 12. <a href=\"https://docs.frappe.io/erpnext/uom\" target=\"_blank\">Learn more &#8594;</a></div>"
+  },
+  {
+   "fieldname": "uoms",
+   "fieldtype": "Table",
+   "oldfieldname": "uom_conversion_details",
+   "oldfieldtype": "Table",
+   "options": "UOM Conversion Detail"
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "taxes",
+   "fieldname": "item_tax_section_break",
+   "fieldtype": "Tab Break",
+   "label": "Tax",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-money"
+  },
+  {
+   "fieldname": "section_break_oilf",
+   "fieldtype": "Section Break",
+   "hide_border": 1
+  },
+  {
+   "fieldname": "column_break_aytr",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Will also apply for variants",
+   "fieldname": "taxes",
+   "fieldtype": "Table",
+   "label": "Taxes",
+   "oldfieldname": "item_tax",
+   "oldfieldtype": "Table",
+   "options": "Item Tax"
   },
   {
    "collapsible": 1,
@@ -259,12 +412,47 @@
    "options": "fa fa-truck"
   },
   {
-   "depends_on": "has_expiry_date",
-   "fieldname": "shelf_life_in_days",
-   "fieldtype": "Int",
-   "label": "Shelf Life In Days",
-   "mandatory_depends_on": "eval:doc.has_batch_no && doc.has_expiry_date",
+   "depends_on": "eval: !doc.__islocal && doc.is_stock_item",
+   "fieldname": "stock_levels_section",
+   "fieldtype": "Section Break",
+   "label": "Stock Levels"
+  },
+  {
+   "fieldname": "stock_levels_html",
+   "fieldtype": "HTML",
+   "label": "Stock Levels HTML",
+   "options": "<div id=\"stock-levels-placeholder\"></div>"
+  },
+  {
+   "fieldname": "inventory_valuation_section",
+   "fieldtype": "Section Break",
+   "label": "Inventory Valuation"
+  },
+  {
+   "depends_on": "is_stock_item",
+   "description": "Serialized items are valued at Moving Average once stock transactions exist and Serial No Wise Valuation is disabled.",
+   "documentation_url": "https://docs.frappe.io/erpnext/change-valuation-method",
+   "fieldname": "valuation_method",
+   "fieldtype": "Select",
+   "label": "Valuation Method",
+   "options": "\nFIFO\nMoving Average\nLIFO"
+  },
+  {
+   "fieldname": "column_break_cqdk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "is_stock_item",
+   "fieldname": "valuation_rate",
+   "fieldtype": "Currency",
+   "in_import_template": 1,
+   "label": "Valuation Rate",
    "non_negative": 1
+  },
+  {
+   "fieldname": "inventory_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Inventory Settings"
   },
   {
    "default": "2099-12-31",
@@ -276,15 +464,6 @@
    "oldfieldname": "end_of_life",
    "oldfieldtype": "Date",
    "show_description_on_click": 1
-  },
-  {
-   "depends_on": "is_stock_item",
-   "documentation_url": "https://docs.frappe.io/erpnext/change-valuation-method",
-   "fieldname": "valuation_method",
-   "fieldtype": "Select",
-   "label": "Valuation Method",
-   "options": "\nFIFO\nMoving Average\nLIFO",
-   "description": "Serialized items are valued at Moving Average once stock transactions exist and Serial No Wise Valuation is disabled."
   },
   {
    "depends_on": "is_stock_item",
@@ -317,6 +496,24 @@
    "options": "UOM"
   },
   {
+   "default": "0",
+   "description": "Allow stock to go below zero for this item, even if negative stock is disabled in Stock Settings.",
+   "fieldname": "allow_negative_stock",
+   "fieldtype": "Check",
+   "label": "Allow Negative Stock"
+  },
+  {
+   "fieldname": "sb_barcodes",
+   "fieldtype": "Section Break",
+   "label": "Barcodes"
+  },
+  {
+   "fieldname": "barcodes",
+   "fieldtype": "Table",
+   "label": "Barcodes",
+   "options": "Item Barcode"
+  },
+  {
    "collapsible": 1,
    "depends_on": "is_stock_item",
    "fieldname": "reorder_section",
@@ -329,17 +526,6 @@
    "fieldtype": "Table",
    "label": "Reorder level based on Warehouse",
    "options": "Item Reorder"
-  },
-  {
-   "fieldname": "unit_of_measure_conversion",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "uoms",
-   "fieldtype": "Table",
-   "oldfieldname": "uom_conversion_details",
-   "oldfieldtype": "Table",
-   "options": "UOM Conversion Detail"
   },
   {
    "collapsible": 1,
@@ -387,12 +573,21 @@
    "label": "Has Expiry Date"
   },
   {
+   "depends_on": "has_expiry_date",
+   "fieldname": "shelf_life_in_days",
+   "fieldtype": "Int",
+   "label": "Shelf Life In Days",
+   "mandatory_depends_on": "eval:doc.has_batch_no && doc.has_expiry_date",
+   "non_negative": 1
+  },
+  {
    "default": "0",
    "depends_on": "has_batch_no",
    "description": "Enable to reserve a small sample from each batch for any analysis arising ahead",
    "documentation_url": "https://docs.frappe.io/erpnext/retain-sample-stock",
    "fieldname": "retain_sample",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Retain Sample",
    "show_description_on_click": 1
   },
@@ -401,6 +596,7 @@
    "description": "Maximum sample quantity that can be retained",
    "fieldname": "sample_quantity",
    "fieldtype": "Int",
+   "hidden": 1,
    "label": "Max Sample Quantity"
   },
   {
@@ -437,20 +633,10 @@
    "show_description_on_click": 1
   },
   {
-   "fieldname": "item_defaults",
-   "fieldtype": "Table",
-   "label": "Item Defaults",
-   "options": "Item Default"
-  },
-  {
-   "default": "1",
-   "description": "Allow this item to be used in purchase transactions.",
-   "fieldname": "is_purchase_item",
-   "fieldtype": "Check",
-   "in_import_template": 1,
-   "label": "Allow Purchase",
-   "read_only_depends_on": "eval: doc.is_customer_provided_item",
-   "show_description_on_click": 1
+   "depends_on": "eval: doc.is_purchase_item",
+   "fieldname": "purchasing_tab",
+   "fieldtype": "Tab Break",
+   "label": "Purchasing"
   },
   {
    "depends_on": "eval: doc.is_purchase_item",
@@ -471,7 +657,7 @@
    "oldfieldtype": "Currency"
   },
   {
-   "description": "Minimum stock level to maintain as a buffer. Used to calculate recommended reorder level: Reorder Level = Safety Stock + (Average Daily Consumption × Lead Time).",
+   "description": "Minimum stock level to maintain as a buffer. Used to calculate recommended reorder level: Reorder Level = Safety Stock + (Average Daily Consumption \u00d7 Lead Time).",
    "fieldname": "safety_stock",
    "fieldtype": "Float",
    "label": "Safety Stock",
@@ -502,15 +688,6 @@
    "read_only": 1
   },
   {
-   "default": "0",
-   "description": "Enable if this item is provided by a customer and received via Stock Entry.",
-   "fieldname": "is_customer_provided_item",
-   "fieldtype": "Check",
-   "label": "Is Customer Provided Item",
-   "read_only_depends_on": "eval: doc.is_purchase_item",
-   "show_description_on_click": 1
-  },
-  {
    "fieldname": "supplier_details",
    "fieldtype": "Section Break",
    "hide_border": 1,
@@ -523,6 +700,10 @@
    "fieldtype": "Check",
    "label": "Delivered by Supplier (Drop Ship)",
    "print_hide": 1
+  },
+  {
+   "fieldname": "section_break_ylma",
+   "fieldtype": "Section Break"
   },
   {
    "fieldname": "supplier_items",
@@ -563,16 +744,6 @@
    "options": "UOM"
   },
   {
-   "default": "1",
-   "description": "Allow this item to be used in sales transactions.",
-   "fieldname": "is_sales_item",
-   "fieldtype": "Check",
-   "in_import_template": 1,
-   "label": "Allow Sales",
-   "show_description_on_click": 1,
-   "in_list_view": 1
-  },
-  {
    "fieldname": "column_break3",
    "fieldtype": "Column Break",
    "oldfieldtype": "Column Break",
@@ -598,32 +769,6 @@
    "options": "Item Customer Detail"
   },
   {
-   "collapsible": 1,
-   "collapsible_depends_on": "taxes",
-   "fieldname": "item_tax_section_break",
-   "fieldtype": "Tab Break",
-   "label": "Tax",
-   "oldfieldtype": "Section Break",
-   "options": "fa fa-money"
-  },
-  {
-   "description": "Will also apply for variants",
-   "fieldname": "taxes",
-   "fieldtype": "Table",
-   "label": "Taxes",
-   "oldfieldname": "item_tax",
-   "oldfieldtype": "Table",
-   "options": "Item Tax"
-  },
-  {
-   "fieldname": "customer_code",
-   "fieldtype": "Small Text",
-   "hidden": 1,
-   "label": "Customer Code",
-   "no_copy": 1,
-   "print_hide": 1
-  },
-  {
    "fieldname": "total_projected_qty",
    "fieldtype": "Float",
    "hidden": 1,
@@ -632,142 +777,12 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:!doc.__islocal",
-   "description": "Percentage by which over-delivery or over-receipt is allowed against a Sales/Purchase Order for this item. If not set, value from Stock Settings will be used.",
-   "fieldname": "over_delivery_receipt_allowance",
-   "fieldtype": "Float",
-   "label": "Over Delivery/Receipt Allowance (%)",
-   "non_negative": 1,
-   "oldfieldname": "tolerance",
-   "oldfieldtype": "Currency"
-  },
-  {
-   "depends_on": "eval:!doc.__islocal",
-   "description": "Percentage by which over-billing is allowed against a Sales/Purchase Order for this item. If not set, value from Accounts Settings will be used.",
-   "fieldname": "over_billing_allowance",
-   "fieldtype": "Float",
-   "label": "Over Billing Allowance (%)",
-   "non_negative": 1
-  },
-  {
-   "default": "0",
-   "description": "Allow stock to go below zero for this item, even if negative stock is disabled in Stock Settings.",
-   "fieldname": "allow_negative_stock",
-   "fieldtype": "Check",
-   "label": "Allow Negative Stock"
-  },
-  {
-   "fieldname": "inventory_settings_section",
-   "fieldtype": "Section Break",
-   "label": "Inventory Settings"
-  },
-  {
-   "depends_on": "eval: doc.is_purchase_item",
-   "fieldname": "purchasing_tab",
-   "fieldtype": "Tab Break",
-   "label": "Purchasing"
-  },
-  {
-   "fieldname": "details",
-   "fieldtype": "Tab Break",
-   "label": "Details",
-   "oldfieldtype": "Section Break",
-   "options": "fa fa-flag"
-  },
-  {
-   "fieldname": "dashboard_tab",
-   "fieldtype": "Tab Break",
-   "label": "Connections",
-   "show_dashboard": 1
-  },
-  {
-   "fieldname": "accounting",
-   "fieldtype": "Tab Break",
-   "label": "Accounting"
-  },
-  {
-   "fieldname": "section_break_znra",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "column_break_wugd",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "section_break_oilf",
-   "fieldtype": "Section Break",
-   "hide_border": 1
-  },
-  {
-   "fieldname": "column_break_aytr",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_cqdk",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "inventory_valuation_section",
-   "fieldtype": "Section Break",
-   "label": "Inventory Valuation"
-  },
-  {
-   "fieldname": "section_break_gjns",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "column_break_ixrh",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "stock_levels_html",
-   "fieldtype": "HTML",
-   "label": "Stock Levels HTML",
-   "options": "<div id=\"stock-levels-placeholder\"></div>"
-  },
-  {
-   "fieldname": "section_break_wfkx",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "section_break_ylma",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "uom_tab",
-   "fieldtype": "Tab Break",
-   "label": "UOM"
-  },
-  {
-   "depends_on": "eval: !doc.__islocal && doc.is_stock_item",
-   "fieldname": "stock_levels_section",
-   "fieldtype": "Section Break",
-   "label": "Stock Levels"
-  },
-  {
-   "fieldname": "uom_conversion_details_column",
-   "fieldtype": "Column Break",
-   "label": "UOM Conversion Details"
-  },
-  {
-   "fieldname": "uom_help_html",
-   "fieldtype": "HTML",
-   "options": "<div style=\"margin-bottom:10px; color: var(--gray-500) !important;\">Define alternate units for this item. Eg: 1 Box = 12 Nos, set conversion factor as 12. <a href=\"https://docs.frappe.io/erpnext/uom\" target=\"_blank\">Learn more &#8594;</a></div>"
-  },
-  {
-   "fieldname": "section_break_zlmj",
-   "fieldtype": "Section Break",
-   "label": "Item Attributes"
-  },
-  {
-   "fieldname": "column_break_kpmi",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "prices_html",
-   "fieldtype": "HTML",
-   "label": "Prices HTML",
-   "options": "<div id=\\\"item-prices-container\\\"></div>"
+   "fieldname": "customer_code",
+   "fieldtype": "Small Text",
+   "hidden": 1,
+   "label": "Customer Code",
+   "no_copy": 1,
+   "print_hide": 1
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -781,27 +796,16 @@
    "label": "Item Prices"
   },
   {
-   "fieldname": "company_restrictions_section",
-   "fieldtype": "Section Break",
-   "label": "Company Restrictions",
-   "permlevel": 1
+   "fieldname": "prices_html",
+   "fieldtype": "HTML",
+   "label": "Prices HTML",
+   "options": "<div id=\\\"item-prices-container\\\"></div>"
   },
   {
-   "default": "0",
-   "fieldname": "restrict_to_companies",
-   "fieldtype": "Check",
-   "label": "Restrict to Companies",
-   "description": "If checked, this Item is only available for transactions in the companies listed below.",
-   "permlevel": 1
-  },
-  {
-   "fieldname": "allowed_companies",
-   "fieldtype": "Table MultiSelect",
-   "label": "Allowed Companies",
-   "options": "Company Restriction",
-   "depends_on": "eval:doc.restrict_to_companies",
-   "mandatory_depends_on": "eval:doc.restrict_to_companies",
-   "permlevel": 1
+   "fieldname": "dashboard_tab",
+   "fieldtype": "Tab Break",
+   "label": "Connections",
+   "show_dashboard": 1
   }
  ],
  "icon": "package",

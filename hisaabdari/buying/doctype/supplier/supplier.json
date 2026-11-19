@@ -22,6 +22,7 @@
   "column_break0",
   "supplier_group",
   "country",
+  "tax_id",
   "image",
   "defaults_section",
   "default_currency",
@@ -52,7 +53,6 @@
   "companies",
   "tax_tab",
   "taxation_section",
-  "tax_id",
   "column_break_27",
   "settings_tab",
   "company_restrictions_section",
@@ -118,6 +118,15 @@
    "reqd": 1
   },
   {
+   "default": "Company",
+   "fieldname": "supplier_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Supplier Type",
+   "options": "Company\nIndividual\nPartnership",
+   "reqd": 1
+  },
+  {
    "fieldname": "alias",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -126,56 +135,11 @@
    "unique": 1
   },
   {
-   "fieldname": "country",
+   "depends_on": "eval:doc.supplier_type == 'Individual'",
+   "fieldname": "gender",
    "fieldtype": "Link",
-   "in_import_template": 1,
-   "label": "Country",
-   "options": "Country"
-  },
-  {
-   "fieldname": "default_bank_account",
-   "fieldtype": "Link",
-   "label": "Company Bank Account",
-   "options": "Bank Account"
-  },
-  {
-   "description": "Supplier's tax identification number (e.g. PAN, VAT, GST)",
-   "fieldname": "tax_id",
-   "fieldtype": "Data",
-   "in_global_search": 1,
-   "in_import_template": 1,
-   "label": "Tax ID"
-  },
-  {
-   "default": "0",
-   "description": "Enable to make this supplier selectable as a transporter on Delivery Notes and Stock Entries",
-   "fieldname": "is_transporter",
-   "fieldtype": "Check",
-   "label": "Is Transporter"
-  },
-  {
-   "default": "0",
-   "description": "Used for inter-company transactions",
-   "fieldname": "is_internal_supplier",
-   "fieldtype": "Check",
-   "label": "Is Internal Supplier",
-   "show_description_on_click": 1
-  },
-  {
-   "depends_on": "is_internal_supplier",
-   "fieldname": "represents_company",
-   "fieldtype": "Link",
-   "ignore_user_permissions": 1,
-   "label": "Represents Company",
-   "options": "Company"
-  },
-  {
-   "fieldname": "image",
-   "fieldtype": "Attach Image",
-   "hidden": 1,
-   "label": "Image",
-   "no_copy": 1,
-   "print_hide": 1
+   "label": "Gender",
+   "options": "Gender"
   },
   {
    "fieldname": "column_break0",
@@ -195,34 +159,32 @@
    "options": "Supplier Group"
   },
   {
-   "default": "Company",
-   "fieldname": "supplier_type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Supplier Type",
-   "options": "Company\nIndividual\nPartnership",
-   "reqd": 1
-  },
-  {
-   "fieldname": "language",
+   "fieldname": "country",
    "fieldtype": "Link",
-   "label": "Print Language",
-   "options": "Language"
+   "in_import_template": 1,
+   "label": "Country",
+   "options": "Country"
   },
   {
-   "bold": 1,
-   "default": "0",
-   "description": "Disabled suppliers are hidden from selection in new transactions but remain in historical records",
-   "fieldname": "disabled",
-   "fieldtype": "Check",
-   "label": "Disabled"
+   "description": "Supplier's tax identification number (e.g. PAN, VAT, GST)",
+   "fieldname": "tax_id",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_import_template": 1,
+   "label": "Tax ID"
   },
   {
-   "depends_on": "represents_company",
-   "fieldname": "companies",
-   "fieldtype": "Table",
-   "label": "Allowed to transact with",
-   "options": "Allowed To Transact With"
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "hidden": 1,
+   "label": "Image",
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Defaults"
   },
   {
    "fieldname": "default_currency",
@@ -233,6 +195,12 @@
    "label": "Billing Currency",
    "no_copy": 1,
    "options": "Currency"
+  },
+  {
+   "fieldname": "default_bank_account",
+   "fieldtype": "Link",
+   "label": "Company Bank Account",
+   "options": "Bank Account"
   },
   {
    "fieldname": "column_break_10",
@@ -254,27 +222,9 @@
    "options": "Payment Terms Template"
   },
   {
-   "default": "0",
-   "description": "When enabled, transactions with this supplier will be blocked based on the Hold Type below",
-   "fieldname": "on_hold",
-   "fieldtype": "Check",
-   "label": "Block Supplier",
-   "show_description_on_click": 1
-  },
-  {
-   "default": "All",
-   "depends_on": "eval:doc.on_hold",
-   "fieldname": "hold_type",
-   "fieldtype": "Select",
-   "label": "Hold Type",
-   "options": "All\nInvoices\nPayments"
-  },
-  {
-   "depends_on": "eval:doc.on_hold",
-   "description": "Leave blank if the Supplier is blocked indefinitely",
-   "fieldname": "release_date",
-   "fieldtype": "Date",
-   "label": "Release Date"
+   "fieldname": "contact_and_address_tab",
+   "fieldtype": "Tab Break",
+   "label": "Address & Contact"
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -302,62 +252,30 @@
    "read_only": 1
   },
   {
-   "description": "Override the default payable / advance accounts on a per-company basis. Leave blank to use each company's defaults from Company settings.",
-   "fieldname": "accounts",
-   "fieldtype": "Table",
-   "label": "Per-Company Accounts",
-   "options": "Party Account"
-  },
-  {
-   "collapsible_depends_on": "supplier_details",
-   "fieldname": "column_break2",
-   "fieldtype": "Section Break",
-   "label": "More Information",
-   "width": "50%"
-  },
-  {
-   "fieldname": "website",
-   "fieldtype": "Data",
-   "label": "Website",
-   "oldfieldname": "website",
-   "oldfieldtype": "Data"
-  },
-  {
-   "description": "General information about your Supplier",
-   "fieldname": "supplier_details",
-   "fieldtype": "Text",
-   "label": "Supplier Details",
-   "oldfieldname": "supplier_details",
-   "oldfieldtype": "Code"
-  },
-  {
-   "fieldname": "column_break_30",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "description": "Frozen suppliers block new transactions and ledger entries until unfrozen. Only users with the role set in Company's \"Roles Allowed to Set and Edit Frozen Account Entries\" can transact.",
-   "fieldname": "is_frozen",
-   "fieldtype": "Check",
-   "label": "Is Frozen"
-  },
-  {
-   "default": "0",
-   "fieldname": "allow_purchase_invoice_creation_without_purchase_order",
-   "fieldtype": "Check",
-   "label": "Allow purchase invoice creation without purchase order"
-  },
-  {
-   "default": "0",
-   "fieldname": "allow_purchase_invoice_creation_without_purchase_receipt",
-   "fieldtype": "Check",
-   "label": "Allow purchase invoice creation without purchase receipt"
-  },
-  {
    "fieldname": "primary_address_and_contact_detail_section",
    "fieldtype": "Section Break",
    "hidden": 1,
    "label": "Primary Address and Contact"
+  },
+  {
+   "description": "Reselect, if the chosen address is edited after save",
+   "fieldname": "supplier_primary_address",
+   "fieldtype": "Link",
+   "label": "Primary Address",
+   "no_copy": 1,
+   "options": "Address"
+  },
+  {
+   "fieldname": "primary_address",
+   "fieldtype": "Text Editor",
+   "hidden": 1,
+   "label": "Primary Address Preview",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_mglr",
+   "fieldtype": "Column Break"
   },
   {
    "description": "Reselect, if the chosen contact is edited after save",
@@ -386,26 +304,75 @@
    "no_copy": 1
   },
   {
-   "fieldname": "primary_address",
-   "fieldtype": "Text Editor",
-   "hidden": 1,
-   "label": "Primary Address Preview",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "description": "Reselect, if the chosen address is edited after save",
-   "fieldname": "supplier_primary_address",
-   "fieldtype": "Link",
-   "label": "Primary Address",
-   "no_copy": 1,
-   "options": "Address"
-  },
-  {
-   "fieldname": "dashboard_tab",
+   "fieldname": "accounting_tab",
    "fieldtype": "Tab Break",
-   "label": "Connections",
-   "show_dashboard": 1
+   "label": "Accounting"
+  },
+  {
+   "fieldname": "default_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Default Accounts"
+  },
+  {
+   "description": "Override the default payable / advance accounts on a per-company basis. Leave blank to use each company's defaults from Company settings.",
+   "fieldname": "accounts",
+   "fieldtype": "Table",
+   "label": "Per-Company Accounts",
+   "options": "Party Account"
+  },
+  {
+   "collapsible_depends_on": "is_internal_supplier",
+   "fieldname": "internal_supplier_section",
+   "fieldtype": "Section Break",
+   "hide_border": 1,
+   "label": "Internal Supplier Details"
+  },
+  {
+   "default": "0",
+   "description": "Used for inter-company transactions",
+   "fieldname": "is_internal_supplier",
+   "fieldtype": "Check",
+   "label": "Is Internal Supplier",
+   "show_description_on_click": 1
+  },
+  {
+   "depends_on": "is_internal_supplier",
+   "fieldname": "represents_company",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Represents Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_16",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_pgad",
+   "fieldtype": "Section Break"
+  },
+  {
+   "depends_on": "represents_company",
+   "fieldname": "companies",
+   "fieldtype": "Table",
+   "label": "Allowed to transact with",
+   "options": "Allowed To Transact With"
+  },
+  {
+   "fieldname": "tax_tab",
+   "fieldtype": "Tab Break",
+   "hidden": 1,
+   "label": "Tax"
+  },
+  {
+   "fieldname": "taxation_section",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "Tax Identification"
+  },
+  {
+   "fieldname": "column_break_27",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "settings_tab",
@@ -436,43 +403,46 @@
    "permlevel": 1
   },
   {
-   "fieldname": "contact_and_address_tab",
-   "fieldtype": "Tab Break",
-   "label": "Address & Contact"
+   "fieldname": "invoice_settings_section",
+   "fieldtype": "Section Break"
   },
   {
-   "fieldname": "accounting_tab",
-   "fieldtype": "Tab Break",
-   "label": "Accounting"
+   "default": "0",
+   "description": "Enable to make this supplier selectable as a transporter on Delivery Notes and Stock Entries",
+   "fieldname": "is_transporter",
+   "fieldtype": "Check",
+   "label": "Is Transporter"
   },
   {
-   "fieldname": "defaults_section",
-   "fieldtype": "Section Break",
-   "label": "Defaults"
+   "default": "0",
+   "fieldname": "allow_purchase_invoice_creation_without_purchase_order",
+   "fieldtype": "Check",
+   "label": "Allow purchase invoice creation without purchase order"
   },
   {
-   "fieldname": "tax_tab",
-   "fieldtype": "Tab Break",
-   "label": "Tax"
-  },
-  {
-   "collapsible_depends_on": "is_internal_supplier",
-   "fieldname": "internal_supplier_section",
-   "fieldtype": "Section Break",
-   "hide_border": 1,
-   "label": "Internal Supplier Details"
-  },
-  {
-   "fieldname": "column_break_16",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_27",
-   "fieldtype": "Column Break"
+   "default": "0",
+   "fieldname": "allow_purchase_invoice_creation_without_purchase_receipt",
+   "fieldtype": "Check",
+   "label": "Allow purchase invoice creation without purchase receipt"
   },
   {
    "fieldname": "column_break_54",
    "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "default": "0",
+   "description": "Disabled suppliers are hidden from selection in new transactions but remain in historical records",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled"
+  },
+  {
+   "default": "0",
+   "description": "Frozen suppliers block new transactions and ledger entries until unfrozen. Only users with the role set in Company's \"Roles Allowed to Set and Edit Frozen Account Entries\" can transact.",
+   "fieldname": "is_frozen",
+   "fieldtype": "Check",
+   "label": "Is Frozen"
   },
   {
    "fieldname": "block_supplier_section",
@@ -480,13 +450,68 @@
    "label": "Block Supplier"
   },
   {
-   "fieldname": "default_accounts_section",
-   "fieldtype": "Section Break",
-   "label": "Default Accounts"
+   "default": "0",
+   "description": "When enabled, transactions with this supplier will be blocked based on the Hold Type below",
+   "fieldname": "on_hold",
+   "fieldtype": "Check",
+   "label": "Block Supplier",
+   "show_description_on_click": 1
   },
   {
-   "fieldname": "column_break_mglr",
+   "default": "All",
+   "depends_on": "eval:doc.on_hold",
+   "fieldname": "hold_type",
+   "fieldtype": "Select",
+   "label": "Hold Type",
+   "options": "All\nInvoices\nPayments"
+  },
+  {
+   "depends_on": "eval:doc.on_hold",
+   "description": "Leave blank if the Supplier is blocked indefinitely",
+   "fieldname": "release_date",
+   "fieldtype": "Date",
+   "label": "Release Date"
+  },
+  {
+   "fieldname": "more_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "More Info"
+  },
+  {
+   "collapsible_depends_on": "supplier_details",
+   "fieldname": "column_break2",
+   "fieldtype": "Section Break",
+   "label": "More Information",
+   "width": "50%"
+  },
+  {
+   "fieldname": "website",
+   "fieldtype": "Data",
+   "label": "Website",
+   "oldfieldname": "website",
+   "oldfieldtype": "Data"
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Link",
+   "label": "Print Language",
+   "options": "Language"
+  },
+  {
+   "fieldname": "column_break_30",
    "fieldtype": "Column Break"
+  },
+  {
+   "description": "General information about your Supplier",
+   "fieldname": "supplier_details",
+   "fieldtype": "Text",
+   "label": "Supplier Details",
+   "oldfieldname": "supplier_details",
+   "oldfieldtype": "Code"
+  },
+  {
+   "fieldname": "section_break_jqla",
+   "fieldtype": "Section Break"
   },
   {
    "description": "Account / customer numbers assigned to your companies by this supplier (for reconciliation on their statements)",
@@ -496,33 +521,10 @@
    "options": "Customer Number At Supplier"
   },
   {
-   "depends_on": "eval:doc.supplier_type == 'Individual'",
-   "fieldname": "gender",
-   "fieldtype": "Link",
-   "label": "Gender",
-   "options": "Gender"
-  },
-  {
-   "fieldname": "taxation_section",
-   "fieldtype": "Section Break",
-   "label": "Tax Identification"
-  },
-  {
-   "fieldname": "invoice_settings_section",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "more_info_tab",
+   "fieldname": "dashboard_tab",
    "fieldtype": "Tab Break",
-   "label": "More Info"
-  },
-  {
-   "fieldname": "section_break_jqla",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "section_break_pgad",
-   "fieldtype": "Section Break"
+   "label": "Connections",
+   "show_dashboard": 1
   }
  ],
  "grid_page_length": 50,

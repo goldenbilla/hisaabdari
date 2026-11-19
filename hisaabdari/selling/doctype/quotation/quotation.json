@@ -4,6 +4,7 @@
  "allow_import": 1,
  "autoname": "naming_series:",
  "creation": "2026-01-29 21:18:32.391385",
+ "default_print_format": "Quotation Classic",
  "description": "Prices you offer a customer or lead.",
  "doctype": "DocType",
  "document_type": "Document",

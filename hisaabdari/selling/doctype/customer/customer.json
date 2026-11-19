@@ -22,6 +22,7 @@
   "gender",
   "column_break0",
   "customer_group",
+  "tax_id",
   "image",
   "section_break_hwkr",
   "default_currency",
@@ -58,7 +59,6 @@
   "companies",
   "tax_tab",
   "taxation_section",
-  "tax_id",
   "column_break_21",
   "settings_tab",
   "company_restrictions_section",
@@ -74,11 +74,11 @@
   "on_hold",
   "release_date",
   "sales_team_tab",
-  "account_manager",
   "more_info_tab",
   "section_break_objq",
   "website",
   "language",
+  "account_manager",
   "column_break_hdmn",
   "customer_details",
   "supplier_numbers_section",
@@ -130,6 +130,17 @@
    "search_index": 1
   },
   {
+   "default": "Company",
+   "fieldname": "customer_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Customer Type",
+   "oldfieldname": "customer_type",
+   "oldfieldtype": "Select",
+   "options": "Company\nIndividual\nPartnership",
+   "reqd": 1
+  },
+  {
    "fieldname": "alias",
    "fieldtype": "Data",
    "in_global_search": 1,
@@ -145,41 +156,9 @@
    "options": "Gender"
   },
   {
-   "default": "Company",
-   "fieldname": "customer_type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Customer Type",
-   "oldfieldname": "customer_type",
-   "oldfieldtype": "Select",
-   "options": "Company\nIndividual\nPartnership",
-   "reqd": 1
-  },
-  {
-   "description": "Pre-filled on payment entries for this customer. Must be a company account.",
-   "fieldname": "default_bank_account",
-   "fieldtype": "Link",
-   "label": "Company Bank Account",
-   "options": "Bank Account",
-   "show_description_on_click": 1
-  },
-  {
-   "fieldname": "image",
-   "fieldtype": "Attach Image",
-   "hidden": 1,
-   "label": "Image",
-   "print_hide": 1
-  },
-  {
    "fieldname": "column_break0",
    "fieldtype": "Column Break",
    "width": "50%"
-  },
-  {
-   "fieldname": "account_manager",
-   "fieldtype": "Link",
-   "label": "Account Manager",
-   "options": "User"
   },
   {
    "fieldname": "customer_group",
@@ -202,35 +181,16 @@
    "label": "Tax ID"
   },
   {
-   "default": "0",
-   "description": "Blocks this customer from being used on any new transaction.",
-   "fieldname": "disabled",
-   "fieldtype": "Check",
-   "label": "Disabled",
-   "show_description_on_click": 1
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "hidden": 1,
+   "label": "Image",
+   "print_hide": 1
   },
   {
-   "default": "0",
-   "description": "Mark if this customer represents an internal company. Enables inter-company transactions.",
-   "fieldname": "is_internal_customer",
-   "fieldtype": "Check",
-   "label": "Is Internal Customer"
-  },
-  {
-   "depends_on": "is_internal_customer",
-   "fieldname": "represents_company",
-   "fieldtype": "Link",
-   "ignore_user_permissions": 1,
-   "label": "Represents Company",
-   "options": "Company",
-   "unique": 1
-  },
-  {
-   "depends_on": "eval: doc.is_internal_customer && doc.represents_company",
-   "fieldname": "companies",
-   "fieldtype": "Table",
-   "label": "Allowed to transact with",
-   "options": "Allowed To Transact With"
+   "fieldname": "section_break_hwkr",
+   "fieldtype": "Section Break",
+   "label": "Defaults"
   },
   {
    "description": "All invoices and orders for this customer will be created in this currency.",
@@ -245,6 +205,18 @@
    "show_description_on_click": 1
   },
   {
+   "description": "Pre-filled on payment entries for this customer. Must be a company account.",
+   "fieldname": "default_bank_account",
+   "fieldtype": "Link",
+   "label": "Company Bank Account",
+   "options": "Bank Account",
+   "show_description_on_click": 1
+  },
+  {
+   "fieldname": "column_break_yvyu",
+   "fieldtype": "Column Break"
+  },
+  {
    "description": "Fetched automatically on sales orders and invoices for this customer.",
    "fieldname": "default_price_list",
    "fieldtype": "Link",
@@ -256,10 +228,18 @@
    "show_description_on_click": 1
   },
   {
-   "fieldname": "language",
+   "description": "Defines when payment is due (e.g. Net 30, 50% advance). Applied automatically on invoices for this customer.",
+   "fieldname": "payment_terms",
    "fieldtype": "Link",
-   "label": "Print Language",
-   "options": "Language"
+   "in_import_template": 1,
+   "label": "Payment Terms Template",
+   "options": "Payment Terms Template",
+   "show_description_on_click": 1
+  },
+  {
+   "fieldname": "contact_and_address_tab",
+   "fieldtype": "Tab Break",
+   "label": "Address & Contact"
   },
   {
    "depends_on": "eval:!doc.__islocal",
@@ -273,11 +253,6 @@
    "fieldtype": "HTML",
    "label": "Address HTML",
    "read_only": 1
-  },
-  {
-   "fieldname": "website",
-   "fieldtype": "Data",
-   "label": "Website"
   },
   {
    "fieldname": "column_break1",
@@ -298,6 +273,30 @@
    "fieldtype": "Section Break",
    "hidden": 1,
    "label": "Primary Address and Contact"
+  },
+  {
+   "fieldname": "column_break_26",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Reselect, if the chosen address is edited after save",
+   "fieldname": "customer_primary_address",
+   "fieldtype": "Link",
+   "label": "Customer Primary Address",
+   "no_copy": 1,
+   "options": "Address"
+  },
+  {
+   "fieldname": "primary_address",
+   "fieldtype": "Text Editor",
+   "hidden": 1,
+   "label": "Primary Address",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_nwor",
+   "fieldtype": "Column Break"
   },
   {
    "description": "Reselect, if the chosen contact is edited after save",
@@ -328,28 +327,33 @@
    "options": "Email"
   },
   {
-   "fieldname": "column_break_26",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Reselect, if the chosen address is edited after save",
-   "fieldname": "customer_primary_address",
-   "fieldtype": "Link",
-   "label": "Customer Primary Address",
-   "no_copy": 1,
-   "options": "Address"
-  },
-  {
-   "fieldname": "primary_address",
-   "fieldtype": "Text Editor",
+   "fetch_from": "customer_primary_contact.first_name",
+   "fieldname": "first_name",
+   "fieldtype": "Read Only",
    "hidden": 1,
-   "label": "Primary Address",
-   "no_copy": 1,
-   "read_only": 1
+   "label": "First Name",
+   "no_copy": 1
+  },
+  {
+   "fetch_from": "customer_primary_contact.last_name",
+   "fieldname": "last_name",
+   "fieldtype": "Read Only",
+   "hidden": 1,
+   "label": "Last Name",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "accounting_tab",
+   "fieldtype": "Tab Break",
+   "label": "Accounting"
   },
   {
    "fieldname": "default_receivable_accounts",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "default_accounts_column",
+   "fieldtype": "Column Break"
   },
   {
    "description": "If set, accounting entries for this customer will post to these accounts instead of the company default.",
@@ -364,49 +368,8 @@
    "fieldtype": "Section Break"
   },
   {
-   "description": "Defines when payment is due (e.g. Net 30, 50% advance). Applied automatically on invoices for this customer.",
-   "fieldname": "payment_terms",
-   "fieldtype": "Link",
-   "in_import_template": 1,
-   "label": "Payment Terms Template",
-   "options": "Payment Terms Template",
-   "show_description_on_click": 1
-  },
-  {
-   "description": "Internal notes about this customer. Not visible on transactions or the portal.",
-   "fieldname": "customer_details",
-   "fieldtype": "Text",
-   "label": "Customer Details",
-   "oldfieldname": "customer_details",
-   "oldfieldtype": "Code"
-  },
-  {
-   "default": "0",
-   "description": "Blocks new transactions and further accounting entries on this customer's account. Only users with the role set in Company's \"Roles Allowed to Set and Edit Frozen Account Entries\" can transact.",
-   "fieldname": "is_frozen",
-   "fieldtype": "Check",
-   "label": "Is Frozen",
-   "show_description_on_click": 1
-  },
-  {
-   "fieldname": "block_customer_section",
-   "fieldtype": "Section Break",
-   "label": "Block Customer"
-  },
-  {
-   "default": "0",
-   "description": "Blocks saving or submitting Sales Orders, Delivery Notes, Sales Invoices and POS Invoices for this customer.",
-   "fieldname": "on_hold",
-   "fieldtype": "Check",
-   "label": "Block Customer",
-   "show_description_on_click": 1
-  },
-  {
-   "depends_on": "eval:doc.on_hold",
-   "description": "Leave blank if the Customer is blocked indefinitely",
-   "fieldname": "release_date",
-   "fieldtype": "Date",
-   "label": "Release Date"
+   "fieldname": "credit_limit_column",
+   "fieldtype": "Column Break"
   },
   {
    "description": "Transactions are blocked when the outstanding balance exceeds the credit limit. When Restrict Customer Over Billing is enabled, new invoices are also blocked when the customer's overdue amount exceeds the Overdue Limit.",
@@ -417,21 +380,52 @@
    "show_description_on_click": 1
   },
   {
-   "default": "0",
-   "fieldname": "so_required",
-   "fieldtype": "Check",
-   "label": "Allow sales invoice creation without sales order"
+   "fieldname": "internal_customer_section",
+   "fieldtype": "Section Break",
+   "hide_border": 1,
+   "label": "Internal Customer Accounting"
   },
   {
    "default": "0",
-   "fieldname": "dn_required",
+   "description": "Mark if this customer represents an internal company. Enables inter-company transactions.",
+   "fieldname": "is_internal_customer",
    "fieldtype": "Check",
-   "label": "Allow sales invoice creation without delivery note"
+   "label": "Is Internal Customer"
   },
   {
-   "fieldname": "contact_and_address_tab",
+   "depends_on": "is_internal_customer",
+   "fieldname": "represents_company",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Represents Company",
+   "options": "Company",
+   "unique": 1
+  },
+  {
+   "fieldname": "section_break_nrvh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "depends_on": "eval: doc.is_internal_customer && doc.represents_company",
+   "fieldname": "companies",
+   "fieldtype": "Table",
+   "label": "Allowed to transact with",
+   "options": "Allowed To Transact With"
+  },
+  {
+   "fieldname": "tax_tab",
    "fieldtype": "Tab Break",
-   "label": "Address & Contact"
+   "hidden": 1,
+   "label": "Tax"
+  },
+  {
+   "fieldname": "taxation_section",
+   "fieldtype": "Section Break",
+   "hidden": 1
+  },
+  {
+   "fieldname": "column_break_21",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "settings_tab",
@@ -462,67 +456,69 @@
    "permlevel": 1
   },
   {
-   "collapsible": 1,
-   "fieldname": "sales_team_tab",
-   "fieldtype": "Tab Break",
-   "label": "Sales Team",
-   "oldfieldtype": "Section Break",
-   "options": "fa fa-group"
+   "fieldname": "section_break_ario",
+   "fieldtype": "Section Break"
   },
   {
-   "fieldname": "column_break_21",
-   "fieldtype": "Column Break"
+   "default": "0",
+   "fieldname": "so_required",
+   "fieldtype": "Check",
+   "label": "Allow sales invoice creation without sales order"
+  },
+  {
+   "default": "0",
+   "fieldname": "dn_required",
+   "fieldtype": "Check",
+   "label": "Allow sales invoice creation without delivery note"
   },
   {
    "fieldname": "column_break_53",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "taxation_section",
-   "fieldtype": "Section Break"
+   "default": "0",
+   "description": "Blocks this customer from being used on any new transaction.",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled",
+   "show_description_on_click": 1
   },
   {
-   "fieldname": "accounting_tab",
-   "fieldtype": "Tab Break",
-   "label": "Accounting"
+   "default": "0",
+   "description": "Blocks new transactions and further accounting entries on this customer's account. Only users with the role set in Company's \"Roles Allowed to Set and Edit Frozen Account Entries\" can transact.",
+   "fieldname": "is_frozen",
+   "fieldtype": "Check",
+   "label": "Is Frozen",
+   "show_description_on_click": 1
   },
   {
-   "fieldname": "tax_tab",
-   "fieldtype": "Tab Break",
-   "label": "Tax"
-  },
-  {
-   "fieldname": "internal_customer_section",
+   "fieldname": "block_customer_section",
    "fieldtype": "Section Break",
-   "hide_border": 1,
-   "label": "Internal Customer Accounting"
+   "label": "Block Customer"
   },
   {
-   "fieldname": "column_break_nwor",
-   "fieldtype": "Column Break"
+   "default": "0",
+   "description": "Blocks saving or submitting Sales Orders, Delivery Notes, Sales Invoices and POS Invoices for this customer.",
+   "fieldname": "on_hold",
+   "fieldtype": "Check",
+   "label": "Block Customer",
+   "show_description_on_click": 1
   },
   {
-   "fetch_from": "customer_primary_contact.first_name",
-   "fieldname": "first_name",
-   "fieldtype": "Read Only",
+   "depends_on": "eval:doc.on_hold",
+   "description": "Leave blank if the Customer is blocked indefinitely",
+   "fieldname": "release_date",
+   "fieldtype": "Date",
+   "label": "Release Date"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "sales_team_tab",
+   "fieldtype": "Tab Break",
    "hidden": 1,
-   "label": "First Name",
-   "no_copy": 1
-  },
-  {
-   "fetch_from": "customer_primary_contact.last_name",
-   "fieldname": "last_name",
-   "fieldtype": "Read Only",
-   "hidden": 1,
-   "label": "Last Name",
-   "no_copy": 1
-  },
-  {
-   "description": "Numbers this customer uses to identify your company in their own system.",
-   "fieldname": "supplier_numbers",
-   "fieldtype": "Table",
-   "label": "Supplier Numbers",
-   "options": "Supplier Number At Customer"
+   "label": "Sales Team",
+   "oldfieldtype": "Section Break",
+   "options": "fa fa-group"
   },
   {
    "fieldname": "more_info_tab",
@@ -534,47 +530,54 @@
    "fieldtype": "Section Break"
   },
   {
+   "fieldname": "website",
+   "fieldtype": "Data",
+   "label": "Website"
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Link",
+   "label": "Print Language",
+   "options": "Language"
+  },
+  {
+   "fieldname": "account_manager",
+   "fieldtype": "Link",
+   "label": "Account Manager",
+   "options": "User"
+  },
+  {
    "fieldname": "column_break_hdmn",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "connections_tab",
-   "fieldtype": "Tab Break",
-   "label": "Connections",
-   "show_dashboard": 1
+   "description": "Internal notes about this customer. Not visible on transactions or the portal.",
+   "fieldname": "customer_details",
+   "fieldtype": "Text",
+   "label": "Customer Details",
+   "oldfieldname": "customer_details",
+   "oldfieldtype": "Code"
   },
   {
    "fieldname": "supplier_numbers_section",
    "fieldtype": "Section Break"
   },
   {
-   "fieldname": "section_break_hwkr",
-   "fieldtype": "Section Break",
-   "label": "Defaults"
-  },
-  {
-   "fieldname": "column_break_yvyu",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "default_accounts_column",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "supplier_numbers_column",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "section_break_nrvh",
-   "fieldtype": "Section Break"
+   "description": "Numbers this customer uses to identify your company in their own system.",
+   "fieldname": "supplier_numbers",
+   "fieldtype": "Table",
+   "label": "Supplier Numbers",
+   "options": "Supplier Number At Customer"
   },
   {
-   "fieldname": "credit_limit_column",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "section_break_ario",
-   "fieldtype": "Section Break"
+   "fieldname": "connections_tab",
+   "fieldtype": "Tab Break",
+   "label": "Connections",
+   "show_dashboard": 1
   }
  ],
  "icon": "user-round",

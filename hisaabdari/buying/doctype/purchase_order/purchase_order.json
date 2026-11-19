@@ -4,6 +4,7 @@
  "allow_import": 1,
  "autoname": "naming_series:",
  "creation": "2013-05-21 16:16:39",
+ "default_print_format": "Purchase Order Classic",
  "description": "An order you place with a supplier.",
  "doctype": "DocType",
  "document_type": "Document",
