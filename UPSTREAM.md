@@ -55,6 +55,11 @@ Kinds of difference, in the order they were applied:
     - Payment Entry `party_or_ledger` and `ledger_account`: a Pay or Receive entry against
       any ledger account (not Receivable, Payable or Stock), posted without a party.
     - Moving Average is the default valuation method; discounts are enabled by default.
+    - Bank reconciliation of our own (upstream's was removed): Bank Reconciliation, Bank
+      Statement Line, Bank Match, Bank Statement Rule and Bank Statement Layout, with a statement
+      reader for CSV, Excel and PDF files (`accounts/bank_statement_reader.py`). It writes the
+      `clearance_date` fields that upstream's Bank Clearance used, and treats entries that
+      already carry one as agreed.
 
 12. **Form layouts:** on the transaction forms and their item rows, fields are hidden or
     moved between sections and a few labels are shortened. No field is renamed or removed

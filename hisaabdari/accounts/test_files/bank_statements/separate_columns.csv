@@ -1,0 +1,15 @@
+Sample Bank Limited,,,,,,
+Statement of Account,,,,,,
+Account Title:,Sitara Hardware Store,,,,,
+Account No:,0123-4567890-01,,IBAN:,PK36SMPL0000111122223333,,
+Period:,01-OCT-2026 to 31-OCT-2026,,Currency:,PKR,,
+,,,,,,
+Date,Value Date,Particulars,Cheque No,Debit,Credit,Balance
+,,Opening Balance,,,,"100,000.00"
+01-OCT-2026,01-OCT-2026,Cheque paid Karim Packaging,00451201,"1,250.00",,"98,750.00"
+05-OCT-2026,05-OCT-2026,"IBFT from Noor Textiles, Faisalabad",,,"25,000.00","123,750.00"
+,,Invoice 1045 settlement,,,,
+12-OCT-2026,13-OCT-2026,ATM withdrawal,,"10,000.00",0.00,"113,750.00"
+31-OCT-2026,31-OCT-2026,Profit credited,,,845.25,"114,595.25"
+,,Closing Balance,,,,"114,595.25"
+,,Total,,"11,250.00","25,845.25",

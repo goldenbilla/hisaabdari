@@ -1,0 +1,173 @@
+{
+ "actions": [],
+ "autoname": "format:BANK-REC-{YYYY}-{#####}",
+ "creation": "2026-11-19 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "bank_account",
+  "company",
+  "column_break_dates",
+  "from_date",
+  "to_date",
+  "statement_closing_balance",
+  "status",
+  "reconciliation_section",
+  "reconciliation_html",
+  "closing_figures_section",
+  "book_balance",
+  "payments_not_presented",
+  "column_break_closing",
+  "receipts_not_credited",
+  "difference"
+ ],
+ "fields": [
+  {
+   "description": "The cash or bank ledger account this statement belongs to.",
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Bank Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "remember_last_selected_value": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Statement From",
+   "reqd": 1
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Statement To",
+   "reqd": 1
+  },
+  {
+   "description": "The last balance printed on the bank statement.",
+   "fieldname": "statement_closing_balance",
+   "fieldtype": "Currency",
+   "label": "Closing Balance on Statement",
+   "options": "Company:company:default_currency"
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "no_copy": 1,
+   "options": "Open\nClosed",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "fieldname": "reconciliation_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "reconciliation_html",
+   "fieldtype": "HTML",
+   "label": "Reconciliation"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.status==\"Closed\"",
+   "fieldname": "closing_figures_section",
+   "fieldtype": "Section Break",
+   "label": "Figures When Closed"
+  },
+  {
+   "fieldname": "book_balance",
+   "fieldtype": "Currency",
+   "label": "Balance in Books",
+   "no_copy": 1,
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payments_not_presented",
+   "fieldtype": "Currency",
+   "label": "Payments Not Yet on Statement",
+   "no_copy": 1,
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_closing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "receipts_not_credited",
+   "fieldtype": "Currency",
+   "label": "Receipts Not Yet on Statement",
+   "no_copy": 1,
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "difference",
+   "fieldtype": "Currency",
+   "label": "Difference",
+   "no_copy": 1,
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-11-19 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Accounts",
+ "name": "Bank Reconciliation",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "bank_account",
+ "track_changes": 1
+}
