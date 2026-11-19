@@ -47,3 +47,4 @@ hisaabdari.patches.v16_0.set_outstanding_for_zero_portion_payment_terms
 hisaabdari.patches.v16_0.drop_item_code_warehouse_posting_datetime_index_from_sabb
 hisaabdari.patches.v16_0.drop_unfolded_item_search_index #2026-11-09
 hisaabdari.patches.v16_0.restrict_company_address_flag
+hisaabdari.patches.v16_0.set_party_or_ledger_in_payment_entry

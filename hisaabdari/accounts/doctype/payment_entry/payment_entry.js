@@ -52,6 +52,21 @@ frappe.ui.form.on("Payment Entry", {
 			};
 		});
 
+		frm.set_query("ledger_account", function (doc) {
+			frm.events.validate_company(frm);
+			let filters = {
+				account_type: ["not in", ["Receivable", "Payable", "Stock"]],
+				is_group: 0,
+				disabled: 0,
+				company: doc.company,
+			};
+			let other_account = doc.payment_type == "Pay" ? doc.paid_from : doc.paid_to;
+			if (other_account) {
+				filters.name = ["!=", other_account];
+			}
+			return { filters };
+		});
+
 		frm.set_query("party_type", function () {
 			frm.events.validate_company(frm);
 			return {
@@ -198,6 +213,10 @@ frappe.ui.form.on("Payment Entry", {
 
 	refresh: function (frm) {
 		hisaabdari.hide_company(frm);
+		if (!frm.doc.party_or_ledger && ["Customer", "Supplier"].includes(frm.doc.party_type)) {
+			frm.doc.party_or_ledger = frm.doc.party_type;
+			frm.refresh_field("party_or_ledger");
+		}
 		frm.events.hide_unhide_fields(frm);
 		frm.events.set_dynamic_labels(frm);
 		frm.events.show_general_ledger(frm);
@@ -264,6 +283,15 @@ frappe.ui.form.on("Payment Entry", {
 		);
 
 		frm.toggle_display("base_paid_amount", frm.doc.paid_from_account_currency != company_currency);
+
+		frm.toggle_display(
+			"paid_from_account_currency",
+			frm.doc.paid_from && frm.doc.paid_from_account_currency != company_currency
+		);
+		frm.toggle_display(
+			"paid_to_account_currency",
+			frm.doc.paid_to && frm.doc.paid_to_account_currency != company_currency
+		);
 
 		if (frm.doc.payment_type == "Pay") {
 			frm.toggle_display(
@@ -410,6 +438,13 @@ frappe.ui.form.on("Payment Entry", {
 					frm.set_value(field, null);
 				}
 			);
+		} else if (frm.doc.party_or_ledger == "Ledger Account") {
+			frm.set_value("paid_from", null);
+			frm.set_value("paid_to", null);
+			if (frm.doc.mode_of_payment) {
+				frm.events.mode_of_payment(frm);
+			}
+			frm.events.ledger_account(frm);
 		} else {
 			if (frm.doc.party) {
 				frm.events.party(frm);
@@ -421,6 +456,39 @@ frappe.ui.form.on("Payment Entry", {
 		}
 	},
 
+	party_or_ledger: function (frm) {
+		if (frm.doc.party_or_ledger == "Ledger Account") {
+			$.each(
+				["party", "party_name", "party_type", "references", "total_allocated_amount"],
+				function (i, field) {
+					frm.set_value(field, null);
+				}
+			);
+			frm.clear_table("taxes");
+			frm.refresh_field("taxes");
+			let ledger_field = frm.doc.payment_type == "Pay" ? "paid_to" : "paid_from";
+			frm.set_value(ledger_field, frm.doc.ledger_account || null);
+			if (frm.doc.mode_of_payment) {
+				frm.events.mode_of_payment(frm);
+			}
+		} else {
+			if (frm.doc.ledger_account) {
+				let ledger_field = frm.doc.payment_type == "Pay" ? "paid_to" : "paid_from";
+				frm.set_value(ledger_field, null);
+				frm.set_value("ledger_account", null);
+			}
+			if (frm.doc.party_type != frm.doc.party_or_ledger) {
+				frm.set_value("party_type", frm.doc.party_or_ledger || null);
+			}
+		}
+	},
+
+	ledger_account: function (frm) {
+		if (frm.doc.party_or_ledger != "Ledger Account") return;
+		let ledger_field = frm.doc.payment_type == "Pay" ? "paid_to" : "paid_from";
+		frm.set_value(ledger_field, frm.doc.ledger_account || null);
+	},
+
 	mode_of_payment: function (frm) {
 		hisaabdari.accounts.pos.get_payment_mode_account(frm, frm.doc.mode_of_payment, function (account) {
 			let payment_account_field = frm.doc.payment_type == "Receive" ? "paid_to" : "paid_from";
@@ -429,6 +497,14 @@ frappe.ui.form.on("Payment Entry", {
 	},
 
 	party_type: function (frm) {
+		if (
+			["Customer", "Supplier"].includes(frm.doc.party_type) &&
+			frm.doc.party_or_ledger != frm.doc.party_type
+		) {
+			frm.doc.party_or_ledger = frm.doc.party_type;
+			frm.refresh_field("party_or_ledger");
+		}
+
 		let party_types = Object.keys(frappe.boot.party_account_types);
 		if (frm.doc.party_type && !party_types.includes(frm.doc.party_type)) {
 			frm.set_value("party_type", "");
@@ -1137,7 +1213,9 @@ frappe.ui.form.on("Payment Entry", {
 
 		var base_party_amount = flt(frm.doc.base_total_allocated_amount) + base_unallocated_amount;
 
-		if (frm.doc.payment_type == "Receive") {
+		if (frm.doc.party_or_ledger == "Ledger Account" && frm.doc.payment_type != "Internal Transfer") {
+			difference_amount = flt(frm.doc.base_paid_amount) - flt(frm.doc.base_received_amount);
+		} else if (frm.doc.payment_type == "Receive") {
 			difference_amount = base_party_amount - flt(frm.doc.base_received_amount);
 		} else if (frm.doc.payment_type == "Pay") {
 			difference_amount = flt(frm.doc.base_paid_amount) - base_party_amount;
@@ -1798,6 +1876,7 @@ frappe.ui.form.on("Payment Entry Deduction", {
 
 function set_default_party_type(frm) {
 	if (frm.doc.party) return;
+	if (frm.doc.party_or_ledger == "Ledger Account") return;
 
 	let party_type;
 	if (frm.doc.payment_type == "Receive") {

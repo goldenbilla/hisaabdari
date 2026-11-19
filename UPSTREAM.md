@@ -48,5 +48,17 @@ Kinds of difference, in the order they were applied:
     `erpnext.patches.` to `hisaabdari.patches.`, and any upstream version-16 patch the site
     has not yet run must be reviewed by hand.
 
+11. **Additions that upstream does not have:**
+    - Stock Settings `use_delivery_note_and_purchase_receipt` (off by default): invoices
+      always update stock and Delivery Note / Purchase Receipt are hidden.
+    - Sales Invoice `is_pos` is labelled "Is Paid" and works without the POS machinery.
+    - Payment Entry `party_or_ledger` and `ledger_account`: a Pay or Receive entry against
+      any ledger account (not Receivable, Payable or Stock), posted without a party.
+    - Moving Average is the default valuation method; discounts are enabled by default.
+
+12. **Form layouts:** on the transaction forms and their item rows, fields are hidden or
+    moved between sections and a few labels are shortened. No field is renamed or removed
+    by this step, so a layout difference against upstream is expected in every such JSON.
+
 To pick up an upstream fix: diff the baseline commit against the newer upstream commit for
 the files that still exist here, and port the relevant hunks by hand.

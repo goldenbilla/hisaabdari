@@ -147,6 +147,9 @@ class PaymentEntry(AccountsController):
 		self.party_account = None
 		self.party_account_currency = None
 
+		if self.is_ledger_payment():
+			return
+
 		if self.payment_type == "Receive":
 			self.party_account_field = "paid_from"
 			self.party_account = self.paid_from
@@ -157,8 +160,76 @@ class PaymentEntry(AccountsController):
 			self.party_account = self.paid_to
 			self.party_account_currency = self.paid_to_account_currency
 
+	def is_ledger_payment(self):
+		return (
+			self.payment_type in ("Receive", "Pay") and self.get("party_or_ledger") == "Ledger Account"
+		)
+
+	def set_ledger_payment_details(self):
+		if not self.is_ledger_payment():
+			self.ledger_account = None
+			self.party_or_ledger = (
+				self.party_type
+				if self.payment_type != "Internal Transfer" and self.party_type in ("Customer", "Supplier")
+				else None
+			)
+			return
+
+		if not self.ledger_account:
+			frappe.throw(_("Ledger Account is mandatory"))
+
+		for field in (
+			"party_type",
+			"party",
+			"party_name",
+			"party_bank_account",
+			"contact_person",
+			"contact_email",
+			"sales_taxes_and_charges_template",
+			"purchase_taxes_and_charges_template",
+			"total_allocated_amount",
+			"base_total_allocated_amount",
+			"unallocated_amount",
+		):
+			self.set(field, None)
+		self.references = []
+		self.taxes = []
+
+		account = frappe.get_cached_value(
+			"Account", self.ledger_account, ["is_group", "account_type", "company", "disabled"], as_dict=True
+		)
+		if not account or account.company != self.company:
+			frappe.throw(
+				_("Ledger Account {0} does not belong to company {1}").format(self.ledger_account, self.company)
+			)
+		if account.is_group or account.disabled:
+			frappe.throw(_("Ledger Account {0} cannot be a group or a disabled account").format(self.ledger_account))
+		if account.account_type in ("Receivable", "Payable"):
+			frappe.throw(
+				_("Ledger Account {0} is a {1} account. Select a Customer or Supplier instead.").format(
+					self.ledger_account, account.account_type
+				)
+			)
+		if account.account_type == "Stock":
+			frappe.throw(_("Ledger Account {0} is a stock account and cannot be used here").format(self.ledger_account))
+
+		ledger_field, other_field = (
+			("paid_to", "paid_from") if self.payment_type == "Pay" else ("paid_from", "paid_to")
+		)
+		if self.get(other_field) == self.ledger_account:
+			frappe.throw(_("Ledger Account and the cash or bank account must be different"))
+
+		if self.get(ledger_field) != self.ledger_account:
+			self.set(ledger_field, self.ledger_account)
+			self.set(ledger_field + "_account_currency", None)
+			self.set(ledger_field + "_account_type", None)
+
+		if not self.cost_center:
+			self.cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
+
 	def validate(self):
 		validate_enabled_mode_of_payment(self.mode_of_payment)
+		self.set_ledger_payment_details()
 		self.setup_party_account_field()
 		self.set_missing_values()
 		self.set_liability_account()
@@ -481,7 +552,7 @@ class PaymentEntry(AccountsController):
 			):
 				self.set(field, None)
 			self.references = []
-		else:
+		elif not self.is_ledger_payment():
 			if not self.party_type:
 				frappe.throw(_("Party Type is mandatory"))
 
@@ -1231,7 +1302,9 @@ class PaymentEntry(AccountsController):
 		base_party_amount = flt(self.base_total_allocated_amount) + flt(base_unallocated_amount)
 		included_taxes = self.get_included_taxes()
 
-		if self.payment_type == "Receive":
+		if self.is_ledger_payment():
+			self.difference_amount = self.base_paid_amount - flt(self.base_received_amount) - included_taxes
+		elif self.payment_type == "Receive":
 			self.difference_amount = base_party_amount - self.base_received_amount + included_taxes
 		elif self.payment_type == "Pay":
 			self.difference_amount = self.base_paid_amount - base_party_amount - included_taxes
@@ -1275,7 +1348,9 @@ class PaymentEntry(AccountsController):
 			# do not set title dynamically if title exists during data import.
 			return
 
-		if self.payment_type in ("Receive", "Pay"):
+		if self.is_ledger_payment():
+			self.title = self.ledger_account
+		elif self.payment_type in ("Receive", "Pay"):
 			self.title = self.party
 		else:
 			self.title = self.paid_from + " - " + self.paid_to
@@ -1306,7 +1381,7 @@ class PaymentEntry(AccountsController):
 					else _(self.paid_to_account_currency),
 					self.paid_amount if self.payment_type == "Receive" else self.received_amount,
 					_("received from") if self.payment_type == "Receive" else _("paid to"),
-					self.party,
+					self.party or self.get("ledger_account"),
 				)
 			]
 
@@ -1637,13 +1712,16 @@ class PaymentEntry(AccountsController):
 		gl_entries.append(gle)
 
 	def add_bank_gl_entries(self, gl_entries):
-		if self.payment_type in ("Pay", "Internal Transfer"):
+		is_ledger_payment = self.is_ledger_payment()
+		if self.payment_type in ("Pay", "Internal Transfer") or is_ledger_payment:
 			gl_entries.append(
 				self.get_gl_dict(
 					{
 						"account": self.paid_from,
 						"account_currency": self.paid_from_account_currency,
-						"against": self.party if self.payment_type == "Pay" else self.paid_to,
+						"against": self.party
+						if self.payment_type == "Pay" and not is_ledger_payment
+						else self.paid_to,
 						"credit_in_account_currency": self.paid_amount,
 						"credit_in_transaction_currency": self.paid_amount
 						if self.paid_from_account_currency == self.transaction_currency
@@ -1655,13 +1733,15 @@ class PaymentEntry(AccountsController):
 					item=self,
 				)
 			)
-		if self.payment_type in ("Receive", "Internal Transfer"):
+		if self.payment_type in ("Receive", "Internal Transfer") or is_ledger_payment:
 			gl_entries.append(
 				self.get_gl_dict(
 					{
 						"account": self.paid_to,
 						"account_currency": self.paid_to_account_currency,
-						"against": self.party if self.payment_type == "Receive" else self.paid_from,
+						"against": self.party
+						if self.payment_type == "Receive" and not is_ledger_payment
+						else self.paid_from,
 						"debit_in_account_currency": self.received_amount,
 						"debit_in_transaction_currency": self.received_amount
 						if self.paid_to_account_currency == self.transaction_currency
